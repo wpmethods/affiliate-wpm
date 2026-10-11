@@ -37,7 +37,7 @@ final class AWPM_Sharing {
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue' ) );
 	}
 	public static function allowed( $id ) {
-		return 'yes' === AWPM_Settings::get( 'enabled' ) && AWPM_Tracking::active( $id );
+		return AWPM_Settings::program_enabled() && AWPM_Tracking::active( $id );
 	}
 	public static function link( $id, $url ) {
 		if ( ! self::allowed( $id ) ) { return new WP_Error( 'inactive', __( 'An active affiliate account is required.', 'affiliate-wpm' ) ); }
@@ -49,10 +49,35 @@ final class AWPM_Sharing {
 		if ( ! $parts || ! in_array( strtolower( $parts['scheme'] ?? '' ), array( 'http', 'https' ), true ) || strtolower( $parts['host'] ?? '' ) !== strtolower( $home['host'] ?? '' ) || $port !== $home_port || isset( $parts['user'] ) || isset( $parts['pass'] ) || ( $base && $path !== $base && 0 !== strpos( $path, $base . '/' ) ) ) {
 			return new WP_Error( 'url', __( 'Use a product or page URL from this store only.', 'affiliate-wpm' ) );
 		}
+		if ( ! self::public_url( $url, $parts ) ) { return new WP_Error( 'private_url', __( 'Use a public product or page link. Account, checkout, admin and action links cannot be shared.', 'affiliate-wpm' ) ); }
 		return add_query_arg( 'awpm_ref', AWPM_Tracking::token( $id ), esc_url_raw( $url, array( 'http', 'https' ) ) );
 	}
+	private static function public_url( $url, $parts ) {
+		$path = strtolower( rawurldecode( rawurldecode( $parts['path'] ?? '/' ) ) );
+		if ( preg_match( '~(?:^|/)(?:wp-admin|wp-login\.php|wp-json|\.\.?)(?:/|$)~', $path ) || preg_match( '/[\x00-\x20\\\\]/', $path ) ) { return false; }
+		foreach ( array( 'myaccount', 'checkout', 'cart' ) as $page ) {
+			$base = wp_parse_url( wc_get_page_permalink( $page ), PHP_URL_PATH );
+			if ( ! $base || '/' === $base ) { continue; }
+			$base = strtolower( rtrim( rawurldecode( $base ), '/' ) );
+			if ( rtrim( $path, '/' ) === $base || 0 === strpos( $path, $base . '/' ) ) { return false; }
+		}
+		parse_str( $parts['query'] ?? '', $query );
+		foreach ( array_keys( $query ) as $key ) {
+			$key = strtolower( $key );
+			if ( false !== strpos( $key, 'nonce' ) || in_array( $key, array( 'action', 'wc-ajax', 'rest_route', 'key', 'order_key', 'pay_for_order', 'reset_key', 'password', 'token', 'access_token' ), true ) ) { return false; }
+		}
+		$post_id = absint( AWPM_Security::value( $query, 'p', AWPM_Security::value( $query, 'page_id' ) ) ) ?: url_to_postid( $url );
+		if ( $post_id ) {
+			$post = get_post( $post_id ); $status = $post ? get_post_status_object( $post->post_status ) : null;
+			if ( ! $post || ! $status || ! $status->public || $post->post_password ) { return false; }
+			if ( in_array( $post_id, array( wc_get_page_id( 'myaccount' ), wc_get_page_id( 'checkout' ), wc_get_page_id( 'cart' ) ), true ) ) { return false; }
+		}
+		return true;
+	}
 	public static function ajax() {
-		if ( ! check_ajax_referer( 'awpm_generate_link', 'nonce', false ) ) { wp_send_json_error( array( 'message' => __( 'Your session expired. Refresh and try again.', 'affiliate-wpm' ) ), 403 ); }
+		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) { wp_send_json_error( array( 'message' => __( 'Use the link generator form.', 'affiliate-wpm' ) ), 405 ); }
+		$nonce = sanitize_text_field( wp_unslash( AWPM_Security::value( $_POST, 'nonce' ) ) );
+		if ( ! is_user_logged_in() || ! wp_verify_nonce( $nonce, 'awpm_generate_link' ) ) { wp_send_json_error( array( 'message' => __( 'Your session expired. Refresh and try again.', 'affiliate-wpm' ) ), 403 ); }
 		$url = isset( $_POST['url'] ) && is_string( $_POST['url'] ) ? trim( wp_unslash( $_POST['url'] ) ) : '';
 		$result = self::link( get_current_user_id(), $url );
 		if ( is_wp_error( $result ) ) { wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 ); }
@@ -60,7 +85,7 @@ final class AWPM_Sharing {
 	}
 	public static function enqueue() {
 		$account = is_account_page() && is_wc_endpoint_url( 'affiliate-wpm' );
-		$product = is_product() && 'yes' === self::get( 'enabled' ) && 'yes' === self::get( 'product_section' ) && 'yes' === AWPM_Settings::get( 'enabled' );
+		$product = is_product() && 'yes' === self::get( 'enabled' ) && 'yes' === self::get( 'product_section' ) && AWPM_Settings::program_enabled();
 		if ( ! $account && ! $product ) { return; }
 		wp_enqueue_style( 'awpm-sharing', AWPM_URL . 'assets/sharing.css', array(), AWPM_VERSION );
 		AWPM_Design::enqueue( 'awpm-sharing' );
@@ -74,7 +99,7 @@ final class AWPM_Sharing {
 	public static function product_section() {
 		global $product;
 		static $shown = array();
-		if ( ! is_product() || ! $product instanceof WC_Product || 'yes' !== self::get( 'enabled' ) || 'yes' !== self::get( 'product_section' ) || 'yes' !== AWPM_Settings::get( 'enabled' ) || isset( $shown[ $product->get_id() ] ) ) { return; }
+		if ( ! is_product() || ! $product instanceof WC_Product || 'yes' !== self::get( 'enabled' ) || 'yes' !== self::get( 'product_section' ) || ! AWPM_Settings::program_enabled() || isset( $shown[ $product->get_id() ] ) ) { return; }
 		$shown[ $product->get_id() ] = true;
 		echo '<section class="awpm awpm-product-share"><h3>' . esc_html( self::get( 'title' ) ) . '</h3>';
 		if ( ! self::allowed( get_current_user_id() ) ) {
@@ -107,12 +132,12 @@ final class AWPM_Sharing {
 	}
 	public static function save() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affiliate-wpm' ), 403 ); }
-		check_admin_referer( 'awpm_sharing' );
+		AWPM_Security::admin_request( 'awpm_sharing' );
 		update_option( 'awpm_sharing', self::clean( wp_unslash( $_POST['awpm_sharing'] ?? array() ) ), false );
 		wp_safe_redirect( admin_url( 'admin.php?page=affiliate-wpm&tab=sharing&saved=1' ) ); exit;
 	}
 	public static function render() {
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="awpm-settings"><input type="hidden" name="action" value="awpm_save_sharing">'; wp_nonce_field( 'awpm_sharing' );
+		echo '<form class="awpm-settings" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="awpm_save_sharing">'; wp_nonce_field( 'awpm_sharing' );
 		echo '<section class="awpm-card"><h2>' . esc_html__( 'Sharing & product placement', 'affiliate-wpm' ) . '</h2><p class="awpm-muted">' . esc_html__( 'Let approved affiliates share products using their own referral links. Visitors get an invitation to join from Affiliate Area.', 'affiliate-wpm' ) . '</p>';
 		foreach ( array( 'enabled' => __( 'Enable social sharing', 'affiliate-wpm' ), 'product_section' => __( 'Show Share & Earn below product cart controls', 'affiliate-wpm' ) ) as $key => $label ) {
 			echo '<p><label class="awpm-toggle"><input type="checkbox" name="awpm_sharing[' . esc_attr( $key ) . ']" value="yes"' . checked( self::get( $key ), 'yes', false ) . '> ' . esc_html( $label ) . '</label></p>';
@@ -125,6 +150,7 @@ final class AWPM_Sharing {
 		foreach ( self::platforms() as $key => $label ) {
 			echo '<label class="awpm-channel"><input type="checkbox" name="awpm_sharing[platforms][]" value="' . esc_attr( $key ) . '"' . checked( in_array( $key, (array) self::get( 'platforms' ), true ), true, false ) . '>' . self::icon( $key ) . '<span>' . esc_html( $label ) . '</span></label>';
 		}
-		echo '</div><p class="awpm-muted">' . esc_html__( 'Only channels with direct link sharing are shown, plus the optional copy icon. The account link generator stays available independently of the product sharing section.', 'affiliate-wpm' ) . '</p></section><button class="button button-primary button-hero awpm-primary">' . esc_html__( 'Save sharing settings', 'affiliate-wpm' ) . '</button></form>';
+		echo '</div><p class="awpm-muted">' . esc_html__( 'Only channels with direct link sharing are shown, plus the optional copy icon. The account link generator stays available independently of the product sharing section.', 'affiliate-wpm' ) . '</p></section>';
+		AWPM_UI::footer( __( 'Save sharing settings', 'affiliate-wpm' ) ); echo '</form>';
 	}
 }

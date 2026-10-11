@@ -43,37 +43,47 @@ final class AWPM_Commissions {
 		}
 		return 0;
 	}
+	/** Resolve only this order's items, including historical unsaved checkout keys. */
+	public static function rate_item( $order, $key, $rate ) {
+		$items = $order->get_items( 'line_item' );
+		if ( isset( $items[ $key ] ) ) { return $items[ $key ]; }
+		if ( preg_match( '/^new:line_items([0-9]+)$/', (string) $key, $match ) ) {
+			$positions = array_values( $items ); $item = $positions[ (int) $match[1] ] ?? false;
+			if ( $item instanceof WC_Order_Item_Product && isset( $rate['quantity'], $rate['total'] ) && is_numeric( $rate['quantity'] ) && is_numeric( $rate['total'] ) && abs( (float) $item->get_quantity() - (float) $rate['quantity'] ) < 0.000001 && abs( (float) $item->get_total() - (float) $rate['total'] ) < 0.000001 ) { return $item; }
+		}
+		return false;
+	}
 	public static function amount( $order ) {
 		if ( $order->has_status( array( 'cancelled', 'failed', 'refunded' ) ) ) { return 0; }
-		$amount = 0;
-		$allocated = 0;
-		foreach ( (array) $order->get_meta( '_awpm_rates' ) as $id => $rate ) {
-			$refund = (float) $order->get_total_refunded_for_item( (int) $id );
+		$fx = $order->get_meta( '_awpm_fx' );
+		$factor = is_array( $fx ) && AWPM_Currency::valid_rate( $fx['rate'] ?? null ) ? (float) $fx['rate'] : 1;
+		$converted = is_array( $fx ) && (int) ( $fx['version'] ?? 1 ) >= 2;
+		$amount = 0; $allocated = 0;
+		foreach ( (array) $order->get_meta( '_awpm_rates' ) as $key => $rate ) {
+			$item = self::rate_item( $order, $key, $rate );
+			$id = $item ? $item->get_id() : 0;
+			$refund = $id ? (float) $order->get_total_refunded_for_item( $id ) : 0;
 			$allocated += $refund;
-			$item = $order->get_item( (int) $id );
 			$taxes = $item ? $item->get_taxes() : array();
-			foreach ( array_keys( $taxes['total'] ?? array() ) as $tax_id ) {
-				$allocated += (float) $order->get_tax_refunded_for_item( (int) $id, $tax_id );
-			}
-			$amount += self::line_amount( $rate['type'], $rate['rate'], $rate['quantity'], $rate['total'], $refund, $order->get_qty_refunded_for_item( (int) $id ) );
+			foreach ( array_keys( $taxes['total'] ?? array() ) as $tax_id ) { $allocated += (float) $order->get_tax_refunded_for_item( $id, $tax_id ); }
+			$multiplier = $converted ? $factor : 1;
+			$amount += self::line_amount( $rate['type'], $rate['rate'], $rate['quantity'], (float) $rate['total'] * $multiplier, $refund * $multiplier, $id ? $order->get_qty_refunded_for_item( $id ) : 0 );
 		}
-		// Unallocated refunds (including shipping-only refunds) reduce commission proportionally.
 		$unallocated = max( 0, (float) $order->get_total_refunded() - $allocated );
-		if ( $unallocated && $order->get_total() > $allocated ) {
-			$amount *= max( 0, 1 - $unallocated / ( (float) $order->get_total() - $allocated ) );
-		}
-		return round( $amount, wc_get_price_decimals() );
+		if ( $unallocated && $order->get_total() > $allocated ) { $amount *= max( 0, 1 - $unallocated / ( (float) $order->get_total() - $allocated ) ); }
+		$precision = is_array( $fx ) ? max( 0, min( 6, (int) ( $fx['precision'] ?? 2 ) ) ) : AWPM_Currency::precision( $order->get_meta( '_awpm_currency' ) ?: $order->get_currency() );
+		return round( $amount, $precision );
 	}
-	public static function sync( $order_or_id ) {
+	public static function sync( $order_or_id, $only_missing = false ) {
 		global $wpdb;
+		$only_missing = true === $only_missing;
 		$id = is_object( $order_or_id ) ? $order_or_id->get_id() : absint( $order_or_id );
 		$order = wc_get_order( $id );
 		if ( ! $order || $order instanceof WC_Order_Refund ) { return; }
 		$affiliate = (int) $order->get_meta( '_awpm_affiliate' );
 		if ( ! $affiliate || ! $order->get_meta( '_awpm_rates' ) ) { return; }
 		$currency = $order->get_meta( '_awpm_currency' );
-		// No invented exchange rates: orders must match the configured earning currency.
-		if ( $currency !== $order->get_currency() ) { return; }
+
 		$policy = $order->get_meta( '_awpm_purchase_policy' ) ?: 'multiple';
 		if ( 'once' === $policy && ! self::prepare_history() ) {
 			self::retry( $id );
@@ -82,12 +92,19 @@ final class AWPM_Commissions {
 		$identity = self::customer_identity( $order );
 		$locks = array( 'customer-email:' . $identity['customer_hash'] );
 		if ( $identity['customer_id'] ) { $locks[] = 'customer-account:' . $identity['customer_id']; }
-		$result = AWPM_Store::locked( $affiliate, function () use ( $wpdb, $id, $affiliate, $currency, $policy, $identity ) {
+		$result = AWPM_Store::locked( $affiliate, function () use ( $wpdb, $id, $affiliate, $currency, $policy, $identity, $only_missing ) {
 			// Reload under the lock so an older order-status callback cannot overwrite a refund.
 			$order = wc_get_order( $id );
 			$table = AWPM_Store::table( 'commissions' );
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE order_id=%d", $id ) );
+			if ( $only_missing && $row ) { return new WP_Error( 'exists', __( 'This order already has a commission record. Its financial history was left unchanged.', 'affiliate-wpm' ) ); }
+			// Existing same-currency records keep their original calculation semantics.
+			$legacy = $row && ! $order->get_meta( '_awpm_calculation_version' ) && $currency === $order->get_currency();
+			$fx = AWPM_Currency::snapshot( $order, $legacy );
+			if ( is_wp_error( $fx ) ) { return $fx; }
+			$order->save_meta_data();
 			$amount = self::amount( $order );
+			if ( ! is_finite( $amount ) || $amount > 99999999999999 ) { return new WP_Error( 'currency', __( 'Converted commission exceeds the supported amount. Review the exchange rate.', 'affiliate-wpm' ) ); }
 			$status = $order->has_status( array( 'cancelled', 'failed', 'refunded' ) ) ? 'rejected' : ( $order->has_status( 'completed' ) ? 'available' : 'pending' );
 			$eligibility = $row ? $row->eligibility : 'eligible';
 			if ( 'once' === $policy ) {
@@ -114,11 +131,14 @@ final class AWPM_Commissions {
 				AWPM_Store::must( $wpdb->insert( $table, $data ) );
 			}
 			if ( 'available' === $status && $amount > 0 && ( ! $row || 'pending' === $row->status ) ) {
-				AWPM_Emails::queue( 'commission_affiliate', $affiliate, array( 'order_id' => $id, 'amount' => $currency . ' ' . wc_format_decimal( $amount, wc_get_price_decimals() ), 'status' => 'available' ) );
+				AWPM_Emails::queue( 'commission_affiliate', $affiliate, array( 'order_id' => $id, 'amount' => $currency . ' ' . wc_format_decimal( $amount, AWPM_Currency::precision( $currency ) ), 'status' => 'available' ) );
 			}
 			return true;
 		}, $locks );
-		if ( is_wp_error( $result ) ) { self::retry( $id ); }
+		if ( is_wp_error( $result ) ) {
+			if ( 'currency' === $result->get_error_code() ) { $order = wc_get_order( $id ); AWPM_Currency::issue( $order, $result ); }
+			elseif ( 'exists' !== $result->get_error_code() ) { self::retry( $id ); }
+		}
 		return $result;
 	}
 }

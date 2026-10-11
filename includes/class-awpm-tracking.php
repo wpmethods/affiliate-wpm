@@ -29,7 +29,7 @@ final class AWPM_Tracking {
 		return $data . '.' . hash_hmac( 'sha256', $data, wp_salt( 'auth' ) );
 	}
 	public static function referral() {
-		return self::cookie_id( self::COOKIE );
+		return AWPM_Settings::program_enabled() ? self::cookie_id( self::COOKIE ) : 0;
 	}
 	private static function cookie_id( $name ) {
 		$value = isset( $_COOKIE[ $name ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ $name ] ) ) : '';
@@ -39,7 +39,7 @@ final class AWPM_Tracking {
 		return self::active( (int) $parts[0] ) ? (int) $parts[0] : 0;
 	}
 	public static function capture() {
-		if ( 'yes' !== AWPM_Settings::get( 'enabled' ) || ! isset( $_GET['awpm_ref'] ) || ! is_scalar( $_GET['awpm_ref'] ) || is_admin() || headers_sent() ) { return; }
+		if ( ! AWPM_Settings::program_enabled() || ! isset( $_GET['awpm_ref'] ) || ! is_scalar( $_GET['awpm_ref'] ) || is_admin() || headers_sent() ) { return; }
 		$token = sanitize_text_field( wp_unslash( $_GET['awpm_ref'] ) );
 		if ( ! preg_match( '/^[a-z0-9]{32}$/', $token ) ) { return; }
 		$users = get_users( array( 'meta_key' => '_awpm_token', 'meta_value' => $token, 'number' => 1, 'fields' => 'ID' ) );
@@ -58,7 +58,7 @@ final class AWPM_Tracking {
 	}
 	public static function record_click( $id ) {
 		global $wpdb;
-		if ( 'yes' !== AWPM_Settings::get( 'enabled' ) || ! self::active( $id ) || $id === get_current_user_id() || ! apply_filters( 'awpm_tracking_allowed', true, $id ) || self::cookie_id( self::CLICK_COOKIE ) === $id ) { return false; }
+		if ( ! AWPM_Settings::program_enabled() || ! self::active( $id ) || $id === get_current_user_id() || ! apply_filters( 'awpm_tracking_allowed', true, $id ) || self::cookie_id( self::CLICK_COOKIE ) === $id ) { return false; }
 		$table = AWPM_Store::table( 'clicks' );
 		$result = $wpdb->query( $wpdb->prepare( "INSERT INTO $table (affiliate_id,click_date,clicks) VALUES (%d,%s,1) ON DUPLICATE KEY UPDATE clicks=clicks+1", $id, current_time( 'Y-m-d' ) ) );
 		if ( false === $result ) { return false; }
@@ -77,7 +77,7 @@ final class AWPM_Tracking {
 		$id = self::referral();
 		$customer = get_userdata( $customer_id );
 		$affiliate = $id ? get_userdata( $id ) : false;
-		if ( 'yes' !== AWPM_Settings::get( 'enabled' ) || ! $customer || ! $affiliate || $id === (int) $customer_id || ! array_intersect( array( 'customer', 'subscriber' ), $customer->roles ) || strtolower( $customer->user_email ) === strtolower( $affiliate->user_email ) || ! apply_filters( 'awpm_tracking_allowed', true, $id ) ) { return; }
+		if ( ! AWPM_Settings::program_enabled() || ! $customer || ! $affiliate || $id === (int) $customer_id || ! array_intersect( array( 'customer', 'subscriber' ), $customer->roles ) || strtolower( $customer->user_email ) === strtolower( $affiliate->user_email ) || ! apply_filters( 'awpm_tracking_allowed', true, $id ) ) { return; }
 		$table = AWPM_Store::table( 'customers' );
 		// A customer can only be attributed once, even if both creation hooks fire.
 		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO $table (customer_id,affiliate_id,created_at) VALUES (%d,%d,%s)", $customer_id, $id, current_time( 'mysql', true ) ) );
@@ -89,7 +89,7 @@ final class AWPM_Tracking {
 		$wpdb->delete( AWPM_Store::table( 'clicks' ), array( 'affiliate_id' => $customer_id ) );
 	}
 	public static function attach( $order ) {
-		if ( 'yes' !== AWPM_Settings::get( 'enabled' ) || $order->get_meta( '_awpm_affiliate' ) ) { return; }
+		if ( ! AWPM_Settings::program_enabled() || $order->get_meta( '_awpm_affiliate' ) ) { return; }
 		$id = self::referral();
 		$user = $id ? get_userdata( $id ) : false;
 		if ( ! $user || $id === (int) $order->get_customer_id() || $id === get_current_user_id() || strtolower( $user->user_email ) === strtolower( $order->get_billing_email() ) ) { return; }
@@ -102,8 +102,9 @@ final class AWPM_Tracking {
 			if ( ! $product ) { continue; }
 			if ( $product->is_type( 'variation' ) ) { $product = wc_get_product( $product->get_parent_id() ); }
 			$type = $product ? $product->get_meta( '_awpm_type' ) : '';
-			$rates[ $item_id ] = array( 'type' => $type ?: AWPM_Settings::get( 'commission_type' ), 'rate' => $type ? (float) $product->get_meta( '_awpm_rate' ) : (float) AWPM_Settings::get( 'commission_rate' ), 'quantity' => (float) $item->get_quantity(), 'total' => (float) $item->get_total() );
+			$rates[ $item_id ] = array( 'title' => AWPM_Account::item_title( $item ), 'type' => $type ?: AWPM_Settings::get( 'commission_type' ), 'rate' => $type ? (float) $product->get_meta( '_awpm_rate' ) : (float) AWPM_Settings::get( 'commission_rate' ), 'quantity' => (float) $item->get_quantity(), 'total' => (float) $item->get_total() );
 		}
 		$order->update_meta_data( '_awpm_rates', $rates );
+		$order->update_meta_data( '_awpm_calculation_version', 2 );
 	}
 }

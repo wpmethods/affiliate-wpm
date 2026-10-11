@@ -4,7 +4,7 @@ Tags: woocommerce, affiliate, commission, referral, payout
 Requires at least: 6.5
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.0.1
+Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,6 +17,8 @@ Lightweight WooCommerce affiliate commissions and manual withdrawal management b
 * Compact product sharing icons for Facebook, WhatsApp, Telegram, X and LinkedIn, plus a copy-link icon.
 * Dedicated Sharing, Emails and Customization tabs; organized program, commission, referral and payout settings.
 
+* Responsive admin navigation, organized settings cards, persistent save controls and live appearance previews.
+* Professional Affiliate Area with earnings cards, withdrawal progress and clear account status.
 * Global percentage or fixed commission per purchased unit.
 * Product overrides and product-level commission exclusion; variations inherit the parent.
 * Configurable once-per-customer or multiple-purchase commission eligibility.
@@ -29,7 +31,7 @@ Lightweight WooCommerce affiliate commissions and manual withdrawal management b
 * WooCommerce order CRUD for HPOS and classic storage; classic and Checkout Block hooks.
 * No remote analytics, payment SDKs, tracking scripts, recurring polling, or frontend framework.
 * Referral click counters and registered-customer totals on admin and affiliate dashboards.
-* A paginated affiliate customer list revealing only first names.
+* A paginated affiliate customer list showing first names and server-masked contact details.
 * Optional administrator approval or rejection for new affiliates; automatic joining by default.
 * Overview lists showing the latest five affiliates and withdrawal requests, with full-list links.
 * Editable plain-text email templates for admin and affiliate notifications.
@@ -42,7 +44,7 @@ Lightweight WooCommerce affiliate commissions and manual withdrawal management b
 3. Open WooCommerce → Affiliate WPM → Settings.
 4. Set commissions, affiliate currency, cookie duration and minimum withdrawal.
 5. Select Manual payout; add payout methods and check the ones you want active.
-6. Customers join at My Account → Affiliate dashboard.
+6. Customers join at My Account → Affiliate Area.
 
 If the account endpoint returns 404, save Settings → Permalinks once.
 
@@ -52,7 +54,7 @@ Percentages use line totals after discounts and exclude shipping and tax. Fixed 
 
 Partial line refunds reduce percentage commissions and prorate fixed commissions. Unallocated refunds, including shipping-only refunds, reduce commissions proportionally to the order total. A changed or refunded order rejects any open withdrawal containing it and releases its reserved balance. Refunds after completed payouts create a negative balance adjustment deducted from future withdrawals; the plugin does not retrieve money already sent. Administrators should review outstanding debts before deleting an affiliate user.
 
-Affiliate currency defaults to the WooCommerce store currency. Only matching-currency orders earn commission; this plugin does not provide currency conversion or multi-currency gateway integration. Currency changes preserve old records and balances; switch back to that currency to withdraw its balance. Financial tables use decimal amounts; calculations round to WooCommerce price precision.
+Affiliate currency defaults to the saved WooCommerce store currency, independent of a visitor's selected shop currency. Percentage commissions use the actual order line totals after discounts, excluding tax, converted into the affiliate currency. Fixed rates and minimum withdrawals are expressed in affiliate currency. Fixed commissions are capped by the converted line total. Exchange rates, source, source/target currencies and calculation precision are frozen per order; later rate or settings changes do not reprice existing commissions. Refunds use the same saved exchange rate. Affiliate amounts are formatted directly with their currency code to prevent shop currency filters from converting them a second time. Currency changes preserve old balances; select their original currency to withdraw them.
 
 == Repeat purchase commissions ==
 
@@ -75,7 +77,7 @@ In single-method mode only the first checked method remains active. Multiple-met
 
 Valid referral link visits increment daily aggregate click counters. Consecutive clicks on the same affiliate link in the same browser count once within 30 minutes using a separate signed HTTP-only cookie. These are referral clicks, not unique visitors or a fraud-proof analytics metric. Self-clicks, inactive affiliates, and tracking vetoed by the consent filter do not count.
 
-New customer/subscriber registrations with a valid referral cookie are attributed once to the affiliate under the current first/last attribution setting. Staff accounts and existing customer accounts do not count as new referred registrations. Affiliates see only their own customers' first names, with billing first name as a fallback and “Customer” when both are missing. No surname, email, username, avatar, profile link or customer ID is displayed in this list. Counts start with version 1.1.0; previous clicks and registrations cannot be reconstructed. Deleting accounts or using WordPress privacy erasure removes associated registration records and affiliate aggregate counters. New registrations do not create an additional lifetime-order commission rule; order attribution continues to follow the referral cookie.
+New customer/subscriber registrations with a valid referral cookie are attributed once to the affiliate under the current first/last attribution setting. Staff accounts and existing customer accounts do not count as new referred registrations. Affiliates see their own customers' first names, with billing first name as a fallback and “Customer” when both are missing. The list includes masked email (up to four local-part characters plus a hidden domain) and phone (up to three leading digits). Full contact details, surname, username, avatar, profile link and customer ID are not displayed. Counts start with version 1.1.0; previous clicks and registrations cannot be reconstructed. Deleting accounts or using WordPress privacy erasure removes associated registration records and affiliate aggregate counters. New registrations do not create an additional lifetime-order commission rule; order attribution continues to follow the referral cookie.
 
 == Privacy and security ==
 
@@ -107,7 +109,7 @@ The Customization tab controls accent/buttons, text, secondary text, borders, ca
 
 Tables: {prefix}awpm_commissions, {prefix}awpm_payouts, {prefix}awpm_clicks and {prefix}awpm_customers, using InnoDB. Named MySQL/MariaDB locks serialize balance mutations per affiliate. Commission order IDs and referred customer IDs are unique. Failed order updates are retried via WooCommerce Action Scheduler. Ensure the database supports GET_LOCK and transactions. Assets load on the plugin admin page, account endpoint, and enabled product sharing pages.
 
-Development checks: the development working copy includes tests/sharing.php. Run php tests/sharing.php --run on a development store (set mysqli.default_port for Local if needed). It creates disposable users and products, intercepts email delivery, restores settings, and removes its fixtures. The checks cover link validation, approval restrictions, sharing toggles, private account output, generator AJAX/nonces, and grouped settings. Test fixtures and packaging scripts are excluded from the installable ZIP.
+Release verification: 48 sharing checks and 88 security, payout and panel checks passed against a development WooCommerce store. Disposable fixtures were removed and mail/network delivery was intercepted. The installable ZIP contains production files only.
 
 == Sharing & affiliate links ==
 
@@ -115,12 +117,24 @@ Configure Sharing from WooCommerce -> Affiliate WPM -> Sharing. Enable or disabl
 
 Facebook, WhatsApp, Telegram, X and LinkedIn icons open their sharing pages with the encoded referral link. Channels without direct link sharing, including Messenger and TikTok, are omitted. The product row contains only its heading and icons, without a URL field or description. Non-affiliates see a small Join affiliate button. The copy icon copies the personal referral URL; a manual copy dialog is available if clipboard access fails. There are no external social SDKs or automatic third-party requests. Referral click statistics count incoming referral visits, not presses on the sharing icons.
 
-The link generator appears immediately after the main referral link in Affiliate Area, independent of the product sharing switch. It requires an active affiliate account and a valid session nonce. It accepts HTTP/HTTPS URLs for this store's host and port, preserves query parameters and fragments, and replaces any previous awpm_ref with the current affiliate's token. External URLs and URLs containing credentials or control characters are rejected. Product links use the parent product URL. Personalized product responses send no-cache headers; exclude logged-in customers from full-page caching.
+The link generator appears immediately after the main referral link in Affiliate Area, independent of the product sharing switch. It requires an active affiliate account and a valid session nonce. It accepts HTTP/HTTPS URLs for this store's host and port, preserves query parameters and fragments, and replaces any previous awpm_ref with the current affiliate's token. External URLs and URLs containing credentials or control characters are rejected. Account, checkout, cart, administrative and action URLs, private or password-protected content, and URLs carrying session/security keys are also rejected. Product links use the parent product URL. Personalized product responses send no-cache headers; exclude logged-in customers from full-page caching.
 
+== Currency conversion ==
+
+WooCommerce -> Affiliate WPM -> Settings -> Commission rules includes Exchange rate source and Manual exchange rates.
+
+Automatic uses the active FOX/WOOCS global object's get_currencies() table or CURCY's get_list_currencies() API (including configured rate fees). Rates are target-rate / source-rate relative to the provider's base. Historical CURCY wmc_order_info tables and FOX _woocs_order_rate/_woocs_order_base_currency metadata are used when they contain the complete conversion pair. Only currencies actually configured in the provider are accepted; free edition currency limits still apply. If two providers supply conflicting rates, select FOX or CURCY explicitly. Changing the customer's displayed currency does not change an existing order's stored currency or affiliate amount.
+
+Without a switcher, enter manual pairs: FROM TO RATE, one per line. RATE means 1 FROM equals RATE TO. Example only: USD BDT 120 defines 1 USD = 120 BDT and derives BDT -> USD by dividing by 120. This is not a live market rate; enter the rate your store actually uses. Automatic falls back to manual pairs when no provider supplies the pair; Manual rates only uses the pairs exclusively. Same currency only restores the original matching-currency behavior. The plugin never fetches external rates, guesses 1:1 for different currencies or changes provider settings.
+
+Missing/invalid rates leave the original referral and commission-rate metadata intact, create an internal order note and save _awpm_fx_error; no invented financial record or endless scheduled retries are created. After configuring a rate, use Recover a missing currency commission with the order ID. This requires manage_woocommerce, POST and a nonce; it only handles attributed orders without a commission record. Where historical provider rates are unavailable, recovery freezes the currently configured rate, as explained in the panel. Existing paid/reserved financial records are protected from recovery. New conversions are captured when the order is first processed, after its actual checkout currency is available; classic checkout and Store API hooks use the same calculation. Orders without saved affiliate attribution cannot be recovered from a URL alone.
+
+Currency switchers are not included or activated by Affiliate WPM. This release reviewed FOX free 1.5.4 and CURCY free 2.2.18 and exercised their actual rate API classes in isolated development checks. Site-specific gateway, theme and premium-extension checkout behavior should be verified on the store's own setup.
 == Changelog ==
-
-= 1.0.1 =
-Register the My Account endpoint with WooCommerce so Join submissions, withdrawal submissions and dashboard assets work correctly. Display errors for unavailable enrollment and failed saves. Add account POST regression coverage.
-
 = 1.0.0 =
 Initial release.
+
+== License and updates ==
+Open WooCommerce > Affiliate WPM > License to activate your WP Methods license. An active license is required for Settings, updates and new affiliate activity. Existing attributed order commissions, refunds, payout processing and history remain available. PHP OpenSSL is required for encrypted credential storage. Changing WordPress authentication salts requires entering the license key again to recover the activation. Temporary verification outages allow a seven-day update grace period after the last successful verification. See docs/license-api.md for the server contract.
+== Tools ==
+Tools offers JSON backup and restore for program, sharing, email and appearance settings. License credentials and product commission overrides are not included in the backup. Reset restores those four settings groups to their defaults; it does not delete license credentials, affiliate accounts, product overrides, orders, commissions, withdrawals, clicks or referred customer records. Type RESET in the form to confirm. Restore and reset require administrator permissions and an active license. CSV downloads are available to store managers and administrators, cover all statuses and preserve original transaction currencies. Referred customer email and phone values are masked. Withdrawal exports contain payment destination details. CSV cells that could execute spreadsheet formulas are prefixed with an apostrophe. Export downloads are generated on request and not saved publicly.

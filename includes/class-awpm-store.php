@@ -116,11 +116,11 @@ final class AWPM_Store {
 	}
 
 	public static function money( $amount, $currency = '' ) {
-		return wc_price( $amount, array( 'currency' => $currency ?: AWPM_Settings::get( 'currency' ) ) );
+		return AWPM_Currency::money( $amount, $currency ?: AWPM_Settings::get( 'currency' ) );
 	}
 
 	public static function status( $status ) {
-		$labels = array( 'pending' => __( 'Pending', 'affiliate-wpm' ), 'available' => __( 'Available', 'affiliate-wpm' ), 'reserved' => __( 'In withdrawal', 'affiliate-wpm' ), 'paid' => __( 'Paid', 'affiliate-wpm' ), 'approved' => __( 'Approved', 'affiliate-wpm' ), 'completed' => __( 'Completed', 'affiliate-wpm' ), 'rejected' => __( 'Rejected', 'affiliate-wpm' ) );
+		$labels = array( 'pending' => __( 'Pending', 'affiliate-wpm' ), 'available' => __( 'Available', 'affiliate-wpm' ), 'reserved' => __( 'In withdrawal', 'affiliate-wpm' ), 'paid' => __( 'Paid', 'affiliate-wpm' ), 'approved' => __( 'Approved', 'affiliate-wpm' ), 'completed' => __( 'Completed', 'affiliate-wpm' ), 'rejected' => __( 'Rejected', 'affiliate-wpm' ), 'paused' => __( 'Paused', 'affiliate-wpm' ) );
 		return '<span class="awpm-badge awpm-' . esc_attr( $status ) . '">' . esc_html( $labels[ $status ] ?? $status ) . '</span>';
 	}
 }

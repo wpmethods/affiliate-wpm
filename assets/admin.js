@@ -1,6 +1,35 @@
 /* Affiliate WPM: scoped, dependency-free settings controls. */
 (function () {
     'use strict';
+    const config = window.awpmAdmin || {};
+    let dirty = false;
+    document.querySelectorAll('form.awpm-settings').forEach(function (form) {
+        const state = form.querySelector('.awpm-save-state');
+        function markDirty() {
+            dirty = true;
+            if (state) { state.textContent = config.unsaved || 'You have unsaved changes.'; state.classList.add('is-dirty'); }
+        }
+        form.addEventListener('input', markDirty);
+        form.addEventListener('change', markDirty);
+        form.addEventListener('click', function (event) {
+            if (event.target.closest('#awpm-add-method, .awpm-remove-method')) markDirty();
+        });
+        form.addEventListener('submit', function () {
+            dirty = false;
+            if (state) state.textContent = config.saving || 'Saving your changes...';
+        });
+        const preview = form.querySelector('.awpm-design-preview');
+        if (preview) form.querySelectorAll('input[type="color"], #awpm-radius').forEach(function (input) {
+            input.addEventListener('input', function () {
+                const key = input.id.replace('awpm-design-', '');
+                if (input.type === 'color' && /^#[a-f0-9]{6}$/i.test(input.value)) preview.style.setProperty('--awpm-' + key, input.value);
+                else if (input.id === 'awpm-radius') preview.style.setProperty('--awpm-radius', Math.min(24, Math.max(0, Number(input.value) || 0)) + 'px');
+            });
+        });
+    });
+    window.addEventListener('beforeunload', function (event) {
+        if (dirty) { event.preventDefault(); event.returnValue = ''; }
+    });
     const list = document.getElementById('awpm-method-list');
     const mode = document.getElementById('awpm-payout_mode');
     const selection = document.getElementById('awpm-method_selection');

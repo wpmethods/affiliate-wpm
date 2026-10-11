@@ -25,17 +25,18 @@ final class AWPM_Emails {
 	}
 	public static function init() { add_action( 'admin_post_awpm_save_emails', array( __CLASS__, 'save' ) ); }
 	public static function clean( $input ) {
-		$config = array( 'admin_email' => '', 'from_email' => '', 'from_name' => sanitize_text_field( $input['from_name'] ?? get_bloginfo( 'name' ) ), 'templates' => array() );
-		foreach ( array( 'admin_email', 'from_email' ) as $key ) { $email = sanitize_email( $input[ $key ] ?? '' ); $config[ $key ] = is_email( $email ) ? $email : get_option( 'admin_email' ); }
+		$input = is_array( $input ) ? $input : array();
+		$config = array( 'admin_email' => '', 'from_email' => '', 'from_name' => substr( sanitize_text_field( AWPM_Security::value( $input, 'from_name', get_bloginfo( 'name' ) ) ), 0, 120 ), 'templates' => array() );
+		foreach ( array( 'admin_email', 'from_email' ) as $key ) { $email = sanitize_email( AWPM_Security::value( $input, $key ) ); $config[ $key ] = is_email( $email ) ? $email : get_option( 'admin_email' ); }
 		foreach ( self::definitions() as $key => $definition ) {
-			$row = $input['templates'][ $key ] ?? array();
-			$config['templates'][ $key ] = array( 'enabled' => isset( $row['enabled'] ) ? 'yes' : 'no', 'subject' => substr( sanitize_text_field( $row['subject'] ?? $definition['subject'] ), 0, 200 ), 'body' => substr( sanitize_textarea_field( $row['body'] ?? $definition['body'] ), 0, 10000 ) );
+			$row = AWPM_Security::rows( AWPM_Security::rows( $input, 'templates' ), $key );
+			$config['templates'][ $key ] = array( 'enabled' => 'yes' === AWPM_Security::value( $row, 'enabled' ) ? 'yes' : 'no', 'subject' => substr( sanitize_text_field( AWPM_Security::value( $row, 'subject', $definition['subject'] ) ), 0, 200 ), 'body' => substr( sanitize_textarea_field( AWPM_Security::value( $row, 'body', $definition['body'] ) ), 0, 10000 ) );
 		}
 		return $config;
 	}
 	public static function save() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affiliate-wpm' ), 403 ); }
-		check_admin_referer( 'awpm_emails' );
+		AWPM_Security::admin_request( 'awpm_emails' );
 		update_option( 'awpm_emails', self::clean( isset( $_POST['awpm_emails'] ) && is_array( $_POST['awpm_emails'] ) ? wp_unslash( $_POST['awpm_emails'] ) : array() ), false );
 		wp_safe_redirect( admin_url( 'admin.php?page=affiliate-wpm&tab=emails&saved=1' ) ); exit;
 	}
@@ -63,11 +64,11 @@ final class AWPM_Emails {
 		catch ( Throwable $error ) { return false; }
 	}
 	public static function payout( $event, $row ) {
-		self::queue( $event, $row->affiliate_id, array( 'payout_id' => $row->id, 'amount' => $row->currency . ' ' . wc_format_decimal( $row->amount, wc_get_price_decimals() ), 'method' => $row->method, 'status' => $row->status, 'note' => $row->note ) );
+		self::queue( $event, $row->affiliate_id, array( 'payout_id' => $row->id, 'amount' => $row->currency . ' ' . wc_format_decimal( $row->amount, AWPM_Currency::precision( $row->currency ) ), 'method' => $row->method, 'status' => $row->status, 'note' => $row->note ) );
 	}
 	public static function render() {
 		$config = self::get();
-		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="awpm_save_emails">'; wp_nonce_field( 'awpm_emails' );
+		echo '<form class="awpm-settings" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="awpm_save_emails">'; wp_nonce_field( 'awpm_emails' );
 		echo '<section class="awpm-card"><h2>' . esc_html__( 'Email delivery', 'affiliate-wpm' ) . '</h2><p>' . esc_html__( 'Messages use WordPress wp_mail. Configure your site mail service or SMTP plugin for reliable delivery. Templates are plain text. Payment destination details are never included.', 'affiliate-wpm' ) . '</p><div class="awpm-form-grid">';
 		foreach ( array( 'admin_email' => 'Admin notification email', 'from_email' => 'Sender email', 'from_name' => 'Sender name' ) as $key => $label ) {
 			echo '<div class="awpm-field"><label for="awpm-email-' . esc_attr( $key ) . '">' . esc_html( $label ) . '</label><input id="awpm-email-' . esc_attr( $key ) . '" type="' . ( 'from_name' === $key ? 'text' : 'email' ) . '" name="awpm_emails[' . esc_attr( $key ) . ']" value="' . esc_attr( $config[ $key ] ) . '" required></div>';
@@ -75,8 +76,8 @@ final class AWPM_Emails {
 		echo '</div></section><p class="awpm-muted">' . esc_html__( 'Placeholders: {site_name}, {affiliate_name}, {status}, {amount}, {method}, {note}, {payout_id}, {order_id}, {dashboard_url}, {admin_url}. Event-specific values are empty for other events.', 'affiliate-wpm' ) . '</p>';
 		foreach ( self::definitions() as $key => $definition ) {
 			$row = $config['templates'][ $key ]; $prefix = 'awpm_emails[templates][' . $key . ']';
-			echo '<section class="awpm-card"><h2>' . esc_html( $definition['label'] ) . '</h2><label class="awpm-toggle"><input type="checkbox" name="' . esc_attr( $prefix . '[enabled]' ) . '" value="yes"' . checked( $row['enabled'], 'yes', false ) . '> ' . esc_html__( 'Enable this email', 'affiliate-wpm' ) . '</label><div class="awpm-field"><label for="awpm-subject-' . esc_attr( $key ) . '">' . esc_html__( 'Subject', 'affiliate-wpm' ) . '</label><input id="awpm-subject-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[subject]' ) . '" value="' . esc_attr( $row['subject'] ) . '" maxlength="200"></div><label for="awpm-body-' . esc_attr( $key ) . '">' . esc_html__( 'Message', 'affiliate-wpm' ) . '</label><textarea class="awpm-template-body" id="awpm-body-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[body]' ) . '" rows="6" maxlength="10000">' . esc_textarea( $row['body'] ) . '</textarea></section>';
+			echo '<details class="awpm-card awpm-email-template"' . ( 'joined_admin' === $key ? ' open' : '' ) . '><summary>' . AWPM_UI::icon( 'emails' ) . esc_html( $definition['label'] ) . '</summary><div class="awpm-template-editor"><label class="awpm-toggle"><input type="checkbox" name="' . esc_attr( $prefix . '[enabled]' ) . '" value="yes"' . checked( $row['enabled'], 'yes', false ) . '> ' . esc_html__( 'Enable this email', 'affiliate-wpm' ) . '</label><div class="awpm-field"><label for="awpm-subject-' . esc_attr( $key ) . '">' . esc_html__( 'Subject', 'affiliate-wpm' ) . '</label><input id="awpm-subject-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[subject]' ) . '" value="' . esc_attr( $row['subject'] ) . '" maxlength="200"></div><label for="awpm-body-' . esc_attr( $key ) . '">' . esc_html__( 'Message', 'affiliate-wpm' ) . '</label><textarea class="awpm-template-body" id="awpm-body-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[body]' ) . '" rows="6" maxlength="10000">' . esc_textarea( $row['body'] ) . '</textarea></div></details>';
 		}
-		echo '<button class="button button-primary button-hero awpm-primary">' . esc_html__( 'Save email templates', 'affiliate-wpm' ) . '</button></form>';
+		AWPM_UI::footer( __( 'Save email templates', 'affiliate-wpm' ) ); echo '</form>';
 	}
 }
