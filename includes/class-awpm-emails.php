@@ -77,6 +77,6 @@ final class AWPM_Emails {
 			$row = $config['templates'][ $key ]; $prefix = 'awpm_emails[templates][' . $key . ']';
 			echo '<section class="awpm-card"><h2>' . esc_html( $definition['label'] ) . '</h2><label class="awpm-toggle"><input type="checkbox" name="' . esc_attr( $prefix . '[enabled]' ) . '" value="yes"' . checked( $row['enabled'], 'yes', false ) . '> ' . esc_html__( 'Enable this email', 'affiliate-wpm' ) . '</label><div class="awpm-field"><label for="awpm-subject-' . esc_attr( $key ) . '">' . esc_html__( 'Subject', 'affiliate-wpm' ) . '</label><input id="awpm-subject-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[subject]' ) . '" value="' . esc_attr( $row['subject'] ) . '" maxlength="200"></div><label for="awpm-body-' . esc_attr( $key ) . '">' . esc_html__( 'Message', 'affiliate-wpm' ) . '</label><textarea class="awpm-template-body" id="awpm-body-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[body]' ) . '" rows="6" maxlength="10000">' . esc_textarea( $row['body'] ) . '</textarea></section>';
 		}
-		echo '<button class="button button-primary button-hero">' . esc_html__( 'Save email templates', 'affiliate-wpm' ) . '</button></form>';
+		echo '<button class="button button-primary button-hero awpm-primary">' . esc_html__( 'Save email templates', 'affiliate-wpm' ) . '</button></form>';
 	}
 }

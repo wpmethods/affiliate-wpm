@@ -4,13 +4,18 @@ Tags: woocommerce, affiliate, commission, referral, payout
 Requires at least: 6.5
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
 Lightweight WooCommerce affiliate commissions and manual withdrawal management by WP Methods.
 
 == Description ==
+
+* Configurable Share & Earn product section below the add-to-cart form, with selectable social icons.
+* Same-store affiliate link generator for product and page URLs in My Account -> Affiliate Area.
+* Compact product sharing icons for Facebook, WhatsApp, Telegram, X and LinkedIn, plus a copy-link icon.
+* Dedicated Sharing, Emails and Customization tabs; organized program, commission, referral and payout settings.
 
 * Global percentage or fixed commission per purchased unit.
 * Product overrides and product-level commission exclusion; variations inherit the parent.
@@ -96,24 +101,23 @@ Emails use wp_mail after successful data commits. Mail failure does not undo enr
 
 == Customization ==
 
-The Customization tab controls accent/buttons, text, secondary text, borders, card backgrounds, highlighted metric backgrounds and card radius (0–24px). Colors apply to both the plugin administration panel and the customer affiliate dashboard. Custom CSS should use .awpm selectors. CSS is loaded only on the plugin panel and affiliate account endpoint, and HTML is removed from CSS input. Editing custom CSS requires unfiltered_html as well as manage_woocommerce; managers without unfiltered_html can edit colors but retain the existing CSS. Multisite administrators may require the appropriate network capability for custom CSS.
+The Customization tab controls accent/buttons, text, secondary text, borders, card backgrounds, highlighted metric backgrounds and card radius (0–24px). Colors apply to both the plugin administration panel and the customer affiliate dashboard. Custom CSS should use .awpm selectors. CSS is loaded on the plugin panel, affiliate account endpoint, and enabled product sharing pages, and HTML is removed from CSS input. Editing custom CSS requires unfiltered_html as well as manage_woocommerce; managers without unfiltered_html can edit colors but retain the existing CSS. Multisite administrators may require the appropriate network capability for custom CSS.
 
 == Developer notes ==
 
-Tables: {prefix}awpm_commissions, {prefix}awpm_payouts, {prefix}awpm_clicks and {prefix}awpm_customers, using InnoDB. Named MySQL/MariaDB locks serialize balance mutations per affiliate. Commission order IDs and referred customer IDs are unique. Failed order updates are retried via WooCommerce Action Scheduler. Ensure the database supports GET_LOCK and transactions. Assets load only on the plugin admin page and account endpoint.
+Tables: {prefix}awpm_commissions, {prefix}awpm_payouts, {prefix}awpm_clicks and {prefix}awpm_customers, using InnoDB. Named MySQL/MariaDB locks serialize balance mutations per affiliate. Commission order IDs and referred customer IDs are unique. Failed order updates are retried via WooCommerce Action Scheduler. Ensure the database supports GET_LOCK and transactions. Assets load on the plugin admin page, account endpoint, and enabled product sharing pages.
 
-Development checks: php tests/integration.php --run, php tests/account-actions.php --run and php tests/referral-stats.php --run (set mysqli.default_port for Local if needed). These create disposable test fixtures and clean them up. The integration suite disables email and webhook delivery in the test process. Run only on a development store. The suites cover commission rules, payout lifecycle, referral integrity, capabilities, privacy tools, endpoint recognition, Join and withdrawal POST handlers, account assets, click deduplication, customer registration attribution and first-name-only disclosure. php tests/package.php creates an installable ZIP without test fixtures or development scripts.
+Development checks: the development working copy includes tests/sharing.php. Run php tests/sharing.php --run on a development store (set mysqli.default_port for Local if needed). It creates disposable users and products, intercepts email delivery, restores settings, and removes its fixtures. The checks cover link validation, approval restrictions, sharing toggles, private account output, generator AJAX/nonces, and grouped settings. Test fixtures and packaging scripts are excluded from the installable ZIP.
+
+== Sharing & affiliate links ==
+
+Configure Sharing from WooCommerce -> Affiliate WPM -> Sharing. Enable or disable social sharing, independently hide the product section, edit its heading, and choose individual channels. The section appears after the standard WooCommerce add-to-cart form. Custom product builders must retain woocommerce_after_add_to_cart_form to display it. Guests and inactive affiliates see an invitation to Affiliate Area; only approved, unblocked affiliates receive a personal product link.
+
+Facebook, WhatsApp, Telegram, X and LinkedIn icons open their sharing pages with the encoded referral link. Channels without direct link sharing, including Messenger and TikTok, are omitted. The product row contains only its heading and icons, without a URL field or description. Non-affiliates see a small Join affiliate button. The copy icon copies the personal referral URL; a manual copy dialog is available if clipboard access fails. There are no external social SDKs or automatic third-party requests. Referral click statistics count incoming referral visits, not presses on the sharing icons.
+
+The link generator appears immediately after the main referral link in Affiliate Area, independent of the product sharing switch. It requires an active affiliate account and a valid session nonce. It accepts HTTP/HTTPS URLs for this store's host and port, preserves query parameters and fragments, and replaces any previous awpm_ref with the current affiliate's token. External URLs and URLs containing credentials or control characters are rejected. Product links use the parent product URL. Personalized product responses send no-cache headers; exclude logged-in customers from full-page caching.
 
 == Changelog ==
-
-= 1.3.0 =
-Add five-item Overview lists, optional affiliate approval and rejection, editable email notifications, and dashboard appearance settings with custom CSS.
-
-= 1.2.0 =
-Add once-per-customer and multiple-purchase commission settings with order snapshots, indexed customer matching, historical commission indexing, and cross-affiliate customer locks. Explain excluded repeat purchases in commission history.
-
-= 1.1.0 =
-Add referral click counters, registered-customer counts and a first-name-only customer list. Include registration attribution in privacy exports and remove it through privacy erasure and account deletion.
 
 = 1.0.1 =
 Register the My Account endpoint with WooCommerce so Join submissions, withdrawal submissions and dashboard assets work correctly. Display errors for unavailable enrollment and failed saves. Add account POST regression coverage.
