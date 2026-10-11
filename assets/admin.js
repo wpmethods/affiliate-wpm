@@ -1,0 +1,47 @@
+/* Affiliate WPM: scoped, dependency-free settings controls. */
+(function () {
+    'use strict';
+    const list = document.getElementById('awpm-method-list');
+    const mode = document.getElementById('awpm-payout_mode');
+    const selection = document.getElementById('awpm-method_selection');
+    const add = document.getElementById('awpm-add-method');
+    let index = list ? list.children.length : 0;
+    function sync() {
+        const manual = document.getElementById('awpm-manual-methods');
+        if (manual && mode) manual.hidden = mode.value !== 'manual';
+        if (add && list) add.disabled = list.children.length >= 20;
+    }
+    function single(changed) {
+        if (!list || !selection || selection.value !== 'single') return;
+        const checked = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'));
+        const keep = changed && changed.checked ? changed : checked[0];
+        checked.forEach(function (box) { box.checked = box === keep; });
+    }
+    if (add) add.addEventListener('click', function () {
+        if (list.children.length >= 20) return;
+        const template = document.getElementById('awpm-method-template');
+        const fragment = template.content.cloneNode(true);
+        fragment.querySelectorAll('[name]').forEach(function (el) { el.name = el.name.replace('__INDEX__', String(index)); });
+        index += 1;
+        list.appendChild(fragment);
+        single(); sync();
+        list.lastElementChild.querySelector('input[type="text"]').focus();
+    });
+    if (list) {
+        list.addEventListener('click', function (event) {
+            if (event.target.closest('.awpm-remove-method')) {
+                event.target.closest('.awpm-method-row').remove(); sync();
+            }
+        });
+        list.addEventListener('change', function (event) {
+            if (event.target.type === 'checkbox') single(event.target);
+        });
+    }
+    if (mode) mode.addEventListener('change', sync);
+    if (selection) selection.addEventListener('change', function () { single(); });
+    document.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-awpm-confirm]');
+        if (button && !window.confirm(button.dataset.awpmConfirm)) event.preventDefault();
+    });
+    sync();
+})();
