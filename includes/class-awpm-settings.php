@@ -3,7 +3,7 @@ defined( 'ABSPATH' ) || exit;
 
 final class AWPM_Settings {
 	public static function defaults() {
-		return array( 'enabled' => 'yes', 'approval_required' => 'no', 'terms_content' => '', 'commission_type' => 'percent', 'commission_rate' => '10', 'minimum' => '50', 'currency' => get_option( 'woocommerce_currency', 'USD' ), 'exchange_source' => 'auto', 'exchange_rates' => '', 'cookie_days' => 30, 'attribution' => 'first', 'purchase_policy' => 'multiple', 'payout_mode' => 'manual', 'method_selection' => 'multiple', 'methods' => array( array( 'id' => 'bank', 'name' => 'Bank transfer', 'instructions' => 'Enter the account holder, bank name and account details. Do not provide passwords or card details.', 'active' => 'yes' ) ) );
+		return array( 'enabled' => 'yes', 'approval_required' => 'no', 'terms_content' => '', 'join_title' => __( 'Turn recommendations into rewards', 'affiliate-wpm' ), 'join_description' => __( 'Join our affiliate program and earn commissions when someone buys through your personal link.', 'affiliate-wpm' ), 'join_button_text' => __( 'Join affiliate program', 'affiliate-wpm' ), 'join_show_rate' => 'no', 'release_mode' => 'completed', 'release_days' => 7, 'commission_type' => 'percent', 'commission_rate' => '10', 'minimum' => '50', 'currency' => get_option( 'woocommerce_currency', 'USD' ), 'exchange_source' => 'auto', 'exchange_rates' => '', 'cookie_days' => 30, 'attribution' => 'first', 'purchase_policy' => 'multiple', 'payout_mode' => 'manual', 'method_selection' => 'multiple', 'methods' => array( array( 'id' => 'bank', 'name' => 'Bank transfer', 'instructions' => 'Enter the account holder, bank name and account details. Do not provide passwords or card details.', 'active' => 'yes' ) ) );
 	}
 	/** Effective program state; keep the merchant's saved preference intact. */
 	public static function program_enabled() {
@@ -37,9 +37,14 @@ final class AWPM_Settings {
 		$input = is_array( $input ) ? $input : array();
 		$defaults = self::defaults();
 		$clean = $defaults;
+		foreach ( array( 'join_title', 'join_button_text' ) as $key ) {
+			$value = mb_substr( sanitize_text_field( AWPM_Security::value( $input, $key, $defaults[ $key ] ) ), 0, 180 );
+			$clean[ $key ] = '' !== trim( $value ) ? $value : $defaults[ $key ];
+		}
+		$clean['join_description'] = mb_substr( sanitize_textarea_field( AWPM_Security::value( $input, 'join_description', $defaults['join_description'] ) ), 0, 3000 );
 		$clean['terms_content'] = wp_kses_post( mb_substr( AWPM_Security::value( $input, 'terms_content' ), 0, 50000 ) );
 		$clean['enabled'] = 'yes' === AWPM_Security::value( $input, 'enabled' ) ? 'yes' : 'no';
-		foreach ( array( 'exchange_source' => array( 'auto', 'fox', 'curcy', 'manual', 'same' ), 'approval_required' => array( 'yes', 'no' ), 'commission_type' => array( 'percent', 'fixed' ), 'attribution' => array( 'first', 'last' ), 'purchase_policy' => array( 'once', 'multiple' ), 'payout_mode' => array( 'manual', 'disabled' ), 'method_selection' => array( 'single', 'multiple' ) ) as $key => $allowed ) {
+		foreach ( array( 'join_show_rate' => array( 'yes', 'no' ), 'release_mode' => array( 'completed', 'delay' ), 'exchange_source' => array( 'auto', 'fox', 'curcy', 'manual', 'same' ), 'approval_required' => array( 'yes', 'no' ), 'commission_type' => array( 'percent', 'fixed' ), 'attribution' => array( 'first', 'last' ), 'purchase_policy' => array( 'once', 'multiple' ), 'payout_mode' => array( 'manual', 'disabled' ), 'method_selection' => array( 'single', 'multiple' ) ) as $key => $allowed ) {
 			$clean[ $key ] = in_array( $input[ $key ] ?? '', $allowed, true ) ? $input[ $key ] : $defaults[ $key ];
 		}
 		$clean['commission_rate'] = wc_format_decimal( max( 0, min( 1000000, (float) wc_format_decimal( AWPM_Security::value( $input, 'commission_rate', '10' ) ) ) ), 6 );
@@ -51,6 +56,7 @@ final class AWPM_Settings {
 		$currency = sanitize_text_field( AWPM_Security::value( $input, 'currency' ) );
 		$clean['currency'] = isset( $currencies[ $currency ] ) ? $currency : $defaults['currency'];
 		$clean['exchange_rates'] = AWPM_Currency::clean_rates( AWPM_Security::value( $input, 'exchange_rates' ) );
+		$clean['release_days'] = max( 1, min( 365, absint( AWPM_Security::value( $input, 'release_days', '7' ) ) ) );
 		$clean['cookie_days'] = max( 1, min( 365, absint( AWPM_Security::value( $input, 'cookie_days', '30' ) ) ) );
 		$clean['methods'] = array();
 		$ids = array();

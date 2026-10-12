@@ -4,7 +4,40 @@
     const config = window.awpmAdmin || {};
     let dirty = false;
     document.querySelectorAll('form.awpm-settings').forEach(function (form) {
-        const state = form.querySelector('.awpm-save-state');
+        const bar = form.querySelector('.awpm-save-bar') || (form.id ? document.querySelector('.awpm-save-bar button[form="' + form.id + '"]')?.closest('.awpm-save-bar') : null);
+        const state = bar ? bar.querySelector('.awpm-save-state') : null;
+        if (bar) {
+            const slot = document.createElement('div');
+            slot.className = 'awpm-save-bar-slot';
+            bar.before(slot);
+            slot.appendChild(bar);
+            let frame = 0;
+            function positionBar() {
+                frame = 0;
+                const rect = slot.getBoundingClientRect();
+                const inset = window.innerWidth <= 600 ? 10 : 16;
+                const docked = rect.bottom <= window.innerHeight - inset;
+                bar.classList.toggle('awpm-save-bar-fixed', !docked);
+                bar.classList.toggle('awpm-save-bar-docked', docked);
+                if (docked) {
+                    bar.style.removeProperty('left');
+                    bar.style.removeProperty('width');
+                } else {
+                    const left = Math.max(10, rect.left);
+                    const right = Math.min(document.documentElement.clientWidth - 10, rect.right);
+                    bar.style.left = left + 'px';
+                    bar.style.width = Math.max(0, right - left) + 'px';
+                }
+                slot.style.height = bar.offsetHeight + 'px';
+            }
+            function queuePosition() {
+                if (!frame) frame = window.requestAnimationFrame(positionBar);
+            }
+            window.addEventListener('resize', queuePosition, {passive: true});
+            window.addEventListener('scroll', queuePosition, {passive: true});
+            if (window.ResizeObserver) new ResizeObserver(queuePosition).observe(slot);
+            positionBar();
+        }
         function markDirty() {
             dirty = true;
             if (state) { state.textContent = config.unsaved || 'You have unsaved changes.'; state.classList.add('is-dirty'); }
@@ -72,5 +105,20 @@
         const button = event.target.closest('[data-awpm-confirm]');
         if (button && !window.confirm(button.dataset.awpmConfirm)) event.preventDefault();
     });
+    const exchange = document.getElementById('awpm-exchange_source');
+    const manualRates = document.getElementById('awpm-manual-exchange-rates');
+    const release = document.getElementById('awpm-release_mode');
+    const releaseDays = document.getElementById('awpm-release-days');
+    function conditionalFields() {
+        if (exchange && manualRates) manualRates.hidden = !['auto', 'manual'].includes(exchange.value);
+        if (release && releaseDays) {
+            releaseDays.hidden = release.value !== 'delay';
+            const input = releaseDays.querySelector('input');
+            if (input) input.required = release.value === 'delay';
+        }
+    }
+    if (exchange) exchange.addEventListener('change', conditionalFields);
+    if (release) release.addEventListener('change', conditionalFields);
+    conditionalFields();
     sync();
 })();

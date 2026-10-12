@@ -27,7 +27,7 @@ final class AWPM_UI {
 	public static function metric( $label, $value, $icon, $note = '' ) {
 		return '<div class="awpm-metric"><div class="awpm-metric-top"><span>' . esc_html( $label ) . '</span><span class="awpm-icon-tile">' . self::icon( $icon ) . '</span></div><strong>' . wp_kses_post( $value ) . '</strong>' . ( $note ? '<small>' . esc_html( $note ) . '</small>' : '' ) . '</div>';
 	}
-	public static function footer( $label ) {
-		echo '<div class="awpm-save-bar"><span class="awpm-save-state" role="status" aria-live="polite">' . esc_html__( 'Changes apply after saving.', 'affiliate-wpm' ) . '</span><button type="submit" class="button button-primary awpm-primary">' . self::icon( 'check' ) . esc_html( $label ) . '</button></div>';
+	public static function footer( $label, $form_id = '' ) {
+		echo '<div class="awpm-save-bar"><span class="awpm-save-state" role="status" aria-live="polite">' . esc_html__( 'Changes apply after saving.', 'affiliate-wpm' ) . '</span><button type="submit"' . ( $form_id ? ' form="' . esc_attr( $form_id ) . '"' : '' ) . ' class="button button-primary awpm-primary">' . self::icon( 'check' ) . esc_html( $label ) . '</button></div>';
 	}
 }

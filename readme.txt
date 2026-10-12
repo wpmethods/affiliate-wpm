@@ -131,6 +131,12 @@ Missing/invalid rates leave the original referral and commission-rate metadata i
 
 Currency switchers are not included or activated by Affiliate WPM. This release reviewed FOX free 1.5.4 and CURCY free 2.2.18 and exercised their actual rate API classes in isolated development checks. Site-specific gateway, theme and premium-extension checkout behavior should be verified on the store's own setup.
 == Changelog ==
+
+= 1.0.1 =
+* Optional waiting period of 1-365 days after order completion, with automatic release. Immediate availability remains the default.
+* Waiting periods saved per completed order; refunds and cancellations rechecked before release.
+* Terms & Conditions moved to the end of Settings. Manual exchange rates shown only for Automatic or Manual rates only.
+
 = 1.0.0 =
 Initial release.
 

@@ -3,11 +3,34 @@ defined( 'ABSPATH' ) || exit;
 
 final class AWPM_Commissions {
 	public static function init() {
+		add_action( 'awpm_release_order', array( __CLASS__, 'sync' ) );
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'sync' ) );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( __CLASS__, 'sync' ) );
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'sync' ), 20 );
 		add_action( 'woocommerce_order_refunded', array( __CLASS__, 'sync' ), 20 );
 		add_action( 'woocommerce_refund_deleted', array( __CLASS__, 'refund_deleted' ), 20, 2 );
+	}
+	/** Snapshot the hold at first completion; released and paid history stays released. */
+	public static function available_at( $order, $row = null ) {
+		if ( ! $order->has_status( 'completed' ) ) { return 0; }
+		if ( $order->meta_exists( '_awpm_available_at' ) ) { return max( 0, (int) $order->get_meta( '_awpm_available_at' ) ); }
+		$released = $row && ( in_array( $row->status, array( 'available', 'reserved', 'paid' ), true ) || (float) $row->paid_amount > 0 || $row->payout_id );
+		$days = ! $released && 'delay' === AWPM_Settings::get( 'release_mode' ) ? max( 1, min( 365, (int) AWPM_Settings::get( 'release_days' ) ) ) : 0;
+		$completed = $order->get_date_completed();
+		$due = $days ? ( $completed ? $completed->getTimestamp() : time() ) + $days * DAY_IN_SECONDS : 0;
+		$order->update_meta_data( '_awpm_release_days', $days );
+		$order->update_meta_data( '_awpm_available_at', $due );
+		return $due;
+	}
+	/** Use WooCommerce's durable scheduler, falling back to WordPress cron. */
+	private static function schedule_release( $id, $due ) {
+		$args = array( (int) $id );
+		$when = max( time() + 1, (int) $due );
+		if ( function_exists( 'as_schedule_single_action' ) ) {
+			if ( ! as_get_scheduled_actions( array( 'hook' => 'awpm_release_order', 'args' => $args, 'group' => 'affiliate-wpm', 'status' => 'pending', 'per_page' => 1 ), 'ids' ) ) {
+				if ( ! as_schedule_single_action( $when, 'awpm_release_order', $args, 'affiliate-wpm', true ) ) { self::retry( $id ); }
+			}
+		} elseif ( ! wp_next_scheduled( 'awpm_release_order', $args ) && ! wp_schedule_single_event( $when, 'awpm_release_order', $args ) ) { self::retry( $id ); }
 	}
 	public static function refund_deleted( $refund_id, $order_id ) { self::sync( $order_id ); }
 	public static function customer_identity( $order ) {
@@ -102,10 +125,11 @@ final class AWPM_Commissions {
 			$legacy = $row && ! $order->get_meta( '_awpm_calculation_version' ) && $currency === $order->get_currency();
 			$fx = AWPM_Currency::snapshot( $order, $legacy );
 			if ( is_wp_error( $fx ) ) { return $fx; }
+			$due = self::available_at( $order, $row );
 			$order->save_meta_data();
 			$amount = self::amount( $order );
 			if ( ! is_finite( $amount ) || $amount > 99999999999999 ) { return new WP_Error( 'currency', __( 'Converted commission exceeds the supported amount. Review the exchange rate.', 'affiliate-wpm' ) ); }
-			$status = $order->has_status( array( 'cancelled', 'failed', 'refunded' ) ) ? 'rejected' : ( $order->has_status( 'completed' ) ? 'available' : 'pending' );
+			$status = $order->has_status( array( 'cancelled', 'failed', 'refunded' ) ) ? 'rejected' : ( $order->has_status( 'completed' ) && $due <= time() ? 'available' : 'pending' );
 			$eligibility = $row ? $row->eligibility : 'eligible';
 			if ( 'once' === $policy ) {
 				if ( 'claimed' === $eligibility && $amount <= 0 && ( ! $row || (float) $row->paid_amount <= 0 ) ) { $eligibility = 'eligible'; }
@@ -138,6 +162,11 @@ final class AWPM_Commissions {
 		if ( is_wp_error( $result ) ) {
 			if ( 'currency' === $result->get_error_code() ) { $order = wc_get_order( $id ); AWPM_Currency::issue( $order, $result ); }
 			elseif ( 'exists' !== $result->get_error_code() ) { self::retry( $id ); }
+		}
+		if ( true === $result ) {
+			$order = wc_get_order( $id );
+			$due = (int) $order->get_meta( '_awpm_available_at' );
+			if ( $due > time() && $order->has_status( 'completed' ) && 'pending' === $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM ' . AWPM_Store::table( 'commissions' ) . ' WHERE order_id=%d', $id ) ) ) { self::schedule_release( $id, $due ); }
 		}
 		return $result;
 	}

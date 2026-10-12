@@ -27,5 +27,9 @@
 
 .awpm .awpm-join-terms{margin:24px 0;text-align:left}.awpm .awpm-terms-content{max-height:260px;overflow:auto;padding:18px 20px;border:1px solid var(--awpm-border,#dce5eb);border-radius:12px;background:#f8fafb;overflow-wrap:anywhere}.awpm .awpm-terms-content>:first-child{margin-top:0}.awpm .awpm-terms-content>:last-child{margin-bottom:0}.awpm .awpm-terms-content ul,.awpm .awpm-terms-content ol{padding-left:24px;list-style-position:outside}.awpm .awpm-terms-accept{display:flex;align-items:flex-start;gap:10px;margin:16px 0;font-weight:500}.awpm .awpm-terms-accept input{flex:0 0 auto;width:18px;height:18px;margin:3px 0 0}.awpm .awpm-terms-content:focus-visible{outline:2px solid var(--awpm-primary,#101e8e);outline-offset:2px}
 
+.awpm [hidden]{display:none!important}
 /* Keep tool actions immediately after their associated fields. */
 .awpm-admin .awpm-tools-action-row{display:flex;align-items:flex-end;gap:12px}.awpm-admin .awpm-tools-action-row>.awpm-field{flex:1;min-width:0;margin:0}.awpm-admin .awpm-tools-action-row>.awpm-primary{flex:0 0 auto;margin:0;white-space:nowrap}.awpm-admin .awpm-tools-action-row input{box-sizing:border-box;width:100%}@media(max-width:600px){.awpm-admin .awpm-tools-action-row{flex-direction:column;align-items:stretch}.awpm-admin .awpm-tools-action-row>.awpm-field{width:100%}.awpm-admin .awpm-tools-action-row>.awpm-primary{align-self:flex-start}}
+
+/* Keep settings actions visible beyond the form, including recovery tools. */
+.awpm-admin .awpm-save-bar.awpm-save-bar-fixed{position:fixed;bottom:16px;right:auto;box-sizing:border-box;margin:0;z-index:100;box-shadow:0 8px 30px rgba(15,35,55,.12)}.awpm-admin .awpm-save-bar-slot{margin-top:18px}.awpm-admin .awpm-save-bar.awpm-save-bar-docked{position:static;box-sizing:border-box;margin:0;width:100%}@media(max-width:600px){.awpm-admin .awpm-save-bar.awpm-save-bar-fixed{bottom:10px}}

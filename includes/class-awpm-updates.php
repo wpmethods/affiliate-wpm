@@ -20,6 +20,13 @@ final class AWPM_Updates {
 		$credentials = AWPM_License::credentials();
 		return array( 'X-WPM-License-Key' => $credentials['key'], 'X-WPM-Activation-Token' => $credentials['token'], 'X-WPM-Domain' => AWPM_License::domain(), 'X-WPM-Product' => 'affiliate-wpm' );
 	}
+	/** Match the WP Methods update-server protocol used by Abandonment Recovery. */
+	public static function query_args( $args ) {
+		$credentials = AWPM_License::credentials();
+		$args['license_key'] = $credentials['key'];
+		$args['domain'] = AWPM_License::domain();
+		return $args;
+	}
 	public static function request_args( $args ) {
 		$args['headers'] = array_merge( isset( $args['headers'] ) && is_array( $args['headers'] ) ? $args['headers'] : array(), self::headers() );
 		$args['timeout'] = 15; $args['redirection'] = 0; $args['sslverify'] = true; $args['reject_unsafe_urls'] = true; $args['limit_response_size'] = 1048576;
@@ -30,6 +37,7 @@ final class AWPM_Updates {
 		if ( ! AWPM_License::active() || ! self::trusted_url( self::endpoint() ) ) { return null; }
 		if ( ! class_exists( '\YahnisElsts\PluginUpdateChecker\v5p6\PucFactory' ) ) { require_once AWPM_PATH . 'vendor/plugin-update-checker/plugin-update-checker.php'; }
 		self::$checker = \YahnisElsts\PluginUpdateChecker\v5p6\PucFactory::buildUpdateChecker( add_query_arg( array( 'action' => 'get_metadata', 'slug' => 'affiliate-wpm' ), self::endpoint() ), AWPM_FILE, 'affiliate-wpm' );
+		self::$checker->addQueryArgFilter( array( __CLASS__, 'query_args' ) );
 		self::$checker->addHttpRequestArgFilter( array( __CLASS__, 'request_args' ) );
 		self::$checker->addResultFilter( array( __CLASS__, 'validate_metadata' ) );
 		self::$checker->addFilter( 'pre_inject_update', array( __CLASS__, 'validate_metadata' ) );
@@ -38,13 +46,13 @@ final class AWPM_Updates {
 	}
 	public static function validate_metadata( $info, $response = null ) {
 		if ( null !== $response ) {
-			if ( is_wp_error( $response ) ) { return null; }
+			if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) { return null; }
 			$data = json_decode( wp_remote_retrieve_body( $response ), true );
 			if ( ! is_array( $data ) || 'affiliate-wpm' !== ( $data['slug'] ?? '' ) ) { return null; }
 		}
 		if ( ! AWPM_License::active() || ! is_object( $info ) || 'affiliate-wpm' !== ( $info->slug ?? '' ) || ! preg_match( '/^\d+(?:\.\d+){1,3}(?:[-.][a-zA-Z0-9.-]+)?$/', (string) ( $info->version ?? '' ) ) || ! self::trusted_url( $info->download_url ?? '' ) ) { return null; }
-		foreach ( AWPM_License::credentials() as $secret ) { if ( $secret && ( false !== strpos( $info->download_url, $secret ) || false !== strpos( $info->download_url, rawurlencode( $secret ) ) ) ) { return null; } }
-		if ( isset( $info->sections ) && is_array( $info->sections ) ) { $info->sections = array_map( 'wp_kses_post', $info->sections ); }
+		if ( ! self::valid_package_auth( $info->download_url ) ) { return null; }
+		if ( isset( $info->sections ) && is_array( $info->sections ) ) { $info->sections = array_map( 'wp_kses_post', array_filter( $info->sections, 'is_string' ) ); }
 		$info->translations = array();
 		return $info;
 	}
@@ -56,13 +64,34 @@ final class AWPM_Updates {
 		}
 		return $transient;
 	}
+	/** A server-generated key is permitted only in its designated query field. */
+	private static function valid_package_auth( $url ) {
+		if ( ! self::trusted_url( $url ) ) { return false; }
+		$query = array(); parse_str( (string) wp_parse_url( $url, PHP_URL_QUERY ), $query );
+		$credentials = AWPM_License::credentials();
+		if ( isset( $query['license_key'] ) && ( ! is_string( $query['license_key'] ) || ! hash_equals( $credentials['key'], $query['license_key'] ) ) ) { return false; }
+		if ( isset( $query['domain'] ) && ( ! is_string( $query['domain'] ) || AWPM_License::domain() !== $query['domain'] ) ) { return false; }
+		$without_key = remove_query_arg( 'license_key', $url );
+		foreach ( $credentials as $secret ) { if ( $secret && ( false !== strpos( $without_key, $secret ) || false !== strpos( $without_key, rawurlencode( $secret ) ) ) ) { return false; } }
+		return true;
+	}
+	private static function authenticated_package( $package ) {
+		return add_query_arg( self::query_args( array() ), $package );
+	}
 	private static function package_matches( $package ) {
 		$state = get_site_option( 'external_updates-affiliate-wpm' );
-		return is_object( $state ) && isset( $state->update ) && is_object( $state->update ) && self::trusted_url( $package ) && $package === ( $state->update->download_url ?? '' );
+		return is_object( $state ) && isset( $state->update ) && is_object( $state->update ) && 'affiliate-wpm' === ( $state->update->slug ?? '' ) && self::valid_package_auth( $package ) && self::valid_package_auth( $state->update->download_url ?? '' ) && remove_query_arg( array( 'license_key', 'domain' ), $package ) === remove_query_arg( array( 'license_key', 'domain' ), $state->update->download_url );
 	}
 	public static function protect_download( $reply, $package, $upgrader, $extra ) {
 		if ( ( $extra['plugin'] ?? '' ) !== plugin_basename( AWPM_FILE ) ) { return $reply; }
-		return AWPM_License::active() && self::package_matches( $package ) ? $reply : new WP_Error( 'awpm_license', __( 'Verify your Affiliate WPM license and check for updates before downloading this update.', 'affiliate-wpm' ) );
+		if ( ! AWPM_License::active() || ! self::package_matches( $package ) ) { return new WP_Error( 'awpm_license', __( 'Verify your Affiliate WPM license and check for updates before downloading this update.', 'affiliate-wpm' ) ); }
+		if ( false !== $reply ) { return $reply; }
+		// The metadata package URL can omit credentials. Add them only when downloading
+		// the verified package, so this server can authenticate it through GET parameters.
+		if ( ! function_exists( 'download_url' ) ) { require_once ABSPATH . 'wp-admin/includes/file.php'; }
+		$result = download_url( self::authenticated_package( $package ), 300, true );
+		if ( is_wp_error( $result ) ) { return new WP_Error( 'awpm_update_download', __( 'Affiliate WPM could not download the update. Verify your license and try again.', 'affiliate-wpm' ) ); }
+		return $result;
 	}
 	public static function download_args( $args, $url ) {
 		if ( AWPM_License::active() && self::package_matches( $url ) ) { $args = self::request_args( $args ); unset( $args['limit_response_size'] ); }
