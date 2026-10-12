@@ -3,7 +3,7 @@
  * Plugin Name: Affiliate WPM
  * Plugin URI: https://wpmethods.com/
  * Description: Lightweight WooCommerce affiliate tracking, product commissions, and manual withdrawals.
- * Version: 1.0.0
+ * Version: 1.0.1
  * Author: WP Methods
  * Author URI: https://wpmethods.com/
  * Text Domain: affiliate-wpm
@@ -15,7 +15,7 @@
  * WC requires at least: 8.2
  */
 defined( 'ABSPATH' ) || exit;
-define( 'AWPM_VERSION', '1.0.0' );
+define( 'AWPM_VERSION', '1.0.1' );
 define( 'AWPM_FILE', __FILE__ );
 define( 'AWPM_PATH', plugin_dir_path( __FILE__ ) );
 define( 'AWPM_URL', plugin_dir_url( __FILE__ ) );

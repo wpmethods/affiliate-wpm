@@ -87,7 +87,7 @@ final class AWPM_Sharing {
 		$account = is_account_page() && is_wc_endpoint_url( 'affiliate-wpm' );
 		$product = is_product() && 'yes' === self::get( 'enabled' ) && 'yes' === self::get( 'product_section' ) && AWPM_Settings::program_enabled();
 		if ( ! $account && ! $product ) { return; }
-		wp_enqueue_style( 'awpm-sharing', AWPM_URL . 'assets/sharing.css', array(), AWPM_VERSION );
+		wp_enqueue_style( 'awpm-sharing', AWPM_URL . 'assets/sharing.css', array(), (string) filemtime( AWPM_PATH . 'assets/sharing.css' ) );
 		AWPM_Design::enqueue( 'awpm-sharing' );
 		wp_enqueue_script( 'awpm-sharing', AWPM_URL . 'assets/sharing.js', array(), AWPM_VERSION, true );
 		wp_localize_script( 'awpm-sharing', 'awpmSharing', array( 'ajax' => admin_url( 'admin-ajax.php' ), 'nonce' => self::allowed( get_current_user_id() ) ? wp_create_nonce( 'awpm_generate_link' ) : '', 'error' => __( 'Unable to generate the link. Please try again.', 'affiliate-wpm' ), 'copied' => __( 'Link copied.', 'affiliate-wpm' ), 'manual' => __( 'Select and copy the link above, then paste it into your message or post.', 'affiliate-wpm' ) ) );

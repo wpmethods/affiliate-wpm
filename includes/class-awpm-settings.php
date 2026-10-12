@@ -2,8 +2,15 @@
 defined( 'ABSPATH' ) || exit;
 
 final class AWPM_Settings {
+	/** Store accounting currency, independent of the visitor's currency-switcher selection. */
+	public static function base_currency() {
+		$currency = get_option( 'woocommerce_currency', 'USD' );
+		$currency = is_string( $currency ) ? strtoupper( trim( $currency ) ) : '';
+		$known = get_woocommerce_currencies();
+		return isset( $known[ $currency ] ) ? $currency : 'USD';
+	}
 	public static function defaults() {
-		return array( 'enabled' => 'yes', 'approval_required' => 'no', 'terms_content' => '', 'join_title' => __( 'Turn recommendations into rewards', 'affiliate-wpm' ), 'join_description' => __( 'Join our affiliate program and earn commissions when someone buys through your personal link.', 'affiliate-wpm' ), 'join_button_text' => __( 'Join affiliate program', 'affiliate-wpm' ), 'join_show_rate' => 'no', 'release_mode' => 'completed', 'release_days' => 7, 'commission_type' => 'percent', 'commission_rate' => '10', 'minimum' => '50', 'currency' => get_option( 'woocommerce_currency', 'USD' ), 'exchange_source' => 'auto', 'exchange_rates' => '', 'cookie_days' => 30, 'attribution' => 'first', 'purchase_policy' => 'multiple', 'payout_mode' => 'manual', 'method_selection' => 'multiple', 'methods' => array( array( 'id' => 'bank', 'name' => 'Bank transfer', 'instructions' => 'Enter the account holder, bank name and account details. Do not provide passwords or card details.', 'active' => 'yes' ) ) );
+		return array( 'enabled' => 'yes', 'approval_required' => 'no', 'terms_content' => '', 'join_title' => __( 'Turn recommendations into rewards', 'affiliate-wpm' ), 'join_description' => __( 'Join our affiliate program and earn commissions when someone buys through your personal link.', 'affiliate-wpm' ), 'join_button_text' => __( 'Join affiliate program', 'affiliate-wpm' ), 'join_show_rate' => 'no', 'release_mode' => 'completed', 'release_days' => 7, 'commission_type' => 'percent', 'commission_rate' => '10', 'minimum' => '50', 'currency' => self::base_currency(), 'exchange_source' => 'auto', 'exchange_rates' => '', 'cookie_days' => 30, 'attribution' => 'first', 'purchase_policy' => 'multiple', 'payout_mode' => 'manual', 'method_selection' => 'multiple', 'methods' => array( array( 'id' => 'bank', 'name' => 'Bank transfer', 'instructions' => 'Enter the account holder, bank name and account details. Do not provide passwords or card details.', 'active' => 'yes' ) ) );
 	}
 	/** Effective program state; keep the merchant's saved preference intact. */
 	public static function program_enabled() {
@@ -11,6 +18,8 @@ final class AWPM_Settings {
 	}
 	public static function get( $key = null ) {
 		$settings = wp_parse_args( get_option( 'awpm_settings', array() ), self::defaults() );
+		// Ignore the former plugin currency override, including older settings backups.
+		$settings['currency'] = self::base_currency();
 		return null === $key ? $settings : ( $settings[ $key ] ?? null );
 	}
 	/** Canonical content and version shared by display and enrollment validation. */
@@ -52,9 +61,7 @@ final class AWPM_Settings {
 			$clean['commission_rate'] = min( 100, (float) $clean['commission_rate'] );
 		}
 		$clean['minimum'] = wc_format_decimal( max( 0.01, min( 1000000, (float) wc_format_decimal( AWPM_Security::value( $input, 'minimum', '50' ) ) ) ), 6 );
-		$currencies = get_woocommerce_currencies();
-		$currency = sanitize_text_field( AWPM_Security::value( $input, 'currency' ) );
-		$clean['currency'] = isset( $currencies[ $currency ] ) ? $currency : $defaults['currency'];
+		$clean['currency'] = self::base_currency();
 		$clean['exchange_rates'] = AWPM_Currency::clean_rates( AWPM_Security::value( $input, 'exchange_rates' ) );
 		$clean['release_days'] = max( 1, min( 365, absint( AWPM_Security::value( $input, 'release_days', '7' ) ) ) );
 		$clean['cookie_days'] = max( 1, min( 365, absint( AWPM_Security::value( $input, 'cookie_days', '30' ) ) ) );
@@ -95,7 +102,7 @@ final class AWPM_Settings {
 	public static function product_fields() {
 		echo '<div class="options_group">';
 		woocommerce_wp_select( array( 'id' => '_awpm_type', 'label' => __( 'Affiliate commission', 'affiliate-wpm' ), 'options' => array( '' => __( 'Use global setting', 'affiliate-wpm' ), 'percent' => __( 'Percentage', 'affiliate-wpm' ), 'fixed' => __( 'Fixed per unit', 'affiliate-wpm' ), 'disabled' => __( 'No commission', 'affiliate-wpm' ) ) ) );
-		woocommerce_wp_text_input( array( 'id' => '_awpm_rate', 'label' => __( 'Affiliate rate / amount', 'affiliate-wpm' ), 'type' => 'number', 'custom_attributes' => array( 'min' => '0', 'step' => '0.000001' ), 'desc_tip' => true, 'description' => __( 'Percentage of the item total after discounts, excluding tax, or fixed amount per unit in the affiliate currency. Applies to all variations.', 'affiliate-wpm' ) ) );
+		woocommerce_wp_text_input( array( 'id' => '_awpm_rate', 'label' => __( 'Affiliate rate / amount', 'affiliate-wpm' ), 'type' => 'number', 'custom_attributes' => array( 'min' => '0', 'step' => '0.000001' ), 'desc_tip' => true, 'description' => __( 'Percentage of the item total after discounts, excluding tax, or fixed amount per unit in the WooCommerce base currency. Applies to all variations.', 'affiliate-wpm' ) ) );
 		echo '</div>';
 	}
 	public static function save_product( $product ) {

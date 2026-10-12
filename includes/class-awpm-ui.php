@@ -4,6 +4,10 @@ defined( 'ABSPATH' ) || exit;
 final class AWPM_UI {
 	public static function icon( $name ) {
 		$paths = array(
+			'wallet' => 'M4 6h14V4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h15V8H5a2 2 0 0 1-2-2 M20 12h-5v5h5 M16 14.5h.01',
+			'send' => 'M21 3L3 10l7 3 3 8 8-18z M10 13L21 3',
+			'award' => 'M12 3l3 2 3 .5 .5 3 2 3-2 3-.5 3-3 .5-3 2-3-2-3-.5-.5-3-2-3 2-3 .5-3 3-.5 3-2z M8 12l3 3 5-6',
+			'user' => 'M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0z M5 21v-3a7 7 0 0 1 14 0v3H5z',
 			'tools' => 'M12 3v12 M7 10l5 5 5-5 M4 16v5h16v-5',
 			'license' => 'M14 3a7 7 0 1 1-5 12L3 21H1v-4l6-6a7 7 0 0 1 7-8 M16 7h.01',
 			'lock' => 'M5 10h14v11H5z M8 10V6a4 4 0 0 1 8 0v4 M12 14v3',
@@ -25,7 +29,8 @@ final class AWPM_UI {
 		return '<svg class="awpm-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="' . esc_attr( $paths[ $name ] ?? $paths['overview'] ) . '"></path></svg>';
 	}
 	public static function metric( $label, $value, $icon, $note = '' ) {
-		return '<div class="awpm-metric"><div class="awpm-metric-top"><span>' . esc_html( $label ) . '</span><span class="awpm-icon-tile">' . self::icon( $icon ) . '</span></div><strong>' . wp_kses_post( $value ) . '</strong>' . ( $note ? '<small>' . esc_html( $note ) . '</small>' : '' ) . '</div>';
+		$tones = array( 'clock' => 'amber', 'wallet' => 'green', 'payouts' => 'green', 'send' => 'blue', 'sharing' => 'blue', 'award' => 'purple', 'check' => 'purple', 'click' => 'slate', 'user' => 'purple', 'affiliates' => 'purple' );
+		return '<div class="awpm-metric awpm-metric-tone-' . esc_attr( $tones[ $icon ] ?? 'blue' ) . '"><div class="awpm-metric-top"><span>' . esc_html( $label ) . '</span><span class="awpm-icon-tile">' . self::icon( $icon ) . '</span></div><strong>' . wp_kses_post( $value ) . '</strong>' . ( $note ? '<small>' . esc_html( $note ) . '</small>' : '' ) . '</div>';
 	}
 	public static function footer( $label, $form_id = '' ) {
 		echo '<div class="awpm-save-bar"><span class="awpm-save-state" role="status" aria-live="polite">' . esc_html__( 'Changes apply after saving.', 'affiliate-wpm' ) . '</span><button type="submit"' . ( $form_id ? ' form="' . esc_attr( $form_id ) . '"' : '' ) . ' class="button button-primary awpm-primary">' . self::icon( 'check' ) . esc_html( $label ) . '</button></div>';

@@ -2,7 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class AWPM_Design {
-	public static function defaults() { return array( 'accent' => '#126b5b', 'ink' => '#172b38', 'muted' => '#627380', 'border' => '#dfe7e8', 'surface' => '#ffffff', 'highlight' => '#eff8f5', 'radius' => 12, 'css' => '' ); }
+	public static function defaults() { return array( 'accent' => '#0066ff', 'ink' => '#172b38', 'muted' => '#627380', 'border' => '#dfe7e8', 'surface' => '#ffffff', 'highlight' => '#eef5ff', 'radius' => 12, 'css' => '' ); }
 	public static function get() { return wp_parse_args( get_option( 'awpm_design', array() ), self::defaults() ); }
 	public static function init() { add_action( 'admin_post_awpm_save_design', array( __CLASS__, 'save' ) ); }
 	public static function clean( $input ) {
@@ -23,7 +23,7 @@ final class AWPM_Design {
 		$design = self::get(); $css = '.awpm{';
 		foreach ( array( 'accent', 'ink', 'muted', 'border', 'surface', 'highlight' ) as $key ) { $css .= '--awpm-' . $key . ':' . ( sanitize_hex_color( $design[ $key ] ) ?: self::defaults()[ $key ] ) . ';'; }
 		$css .= '--awpm-radius:' . min( 24, max( 0, (int) $design['radius'] ) ) . 'px;}';
-		$css .= '.awpm .awpm-card,.awpm .awpm-metric{background:var(--awpm-surface);border-radius:var(--awpm-radius)}.awpm .awpm-metric:first-child{background:var(--awpm-highlight);border-color:var(--awpm-border)}.awpm .button-primary{background:var(--awpm-accent);border-color:var(--awpm-accent);color:#fff}';
+		$css .= '.awpm .awpm-card,.awpm .awpm-metric{background:var(--awpm-surface);border-radius:var(--awpm-radius)}.awpm .button-primary{background:var(--awpm-accent);border-color:var(--awpm-accent);color:#fff}';
 		wp_add_inline_style( $handle, $css . "\n" . wp_strip_all_tags( $design['css'] ) );
 	}
 	public static function render() {
