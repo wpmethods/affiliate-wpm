@@ -2,6 +2,50 @@
 (function () {
     'use strict';
     const config = window.awpmAdmin || {};
+    const notices = Array.from(document.querySelectorAll('.awpm-admin [data-awpm-toast]'));
+    if (notices.length) {
+        const stack = document.createElement('div');
+        stack.className = 'awpm-toast-stack';
+        document.querySelector('.awpm-admin').appendChild(stack);
+        notices.forEach(function (toast) {
+            stack.appendChild(toast);
+            let timer = 0;
+            let remaining = Math.min(18000, Math.max(8000, toast.textContent.length * 45));
+            let started = 0;
+            let hovered = false;
+            let closed = false;
+            function pause() {
+                if (timer) { window.clearTimeout(timer); timer = 0; remaining = Math.max(0, remaining - (Date.now() - started)); }
+            }
+            function resume() {
+                if (closed || timer || toast.dataset.autodismiss !== 'yes' || hovered || toast.contains(document.activeElement) || document.hidden) return;
+                started = Date.now(); timer = window.setTimeout(dismiss, remaining);
+            }
+            function dismiss() {
+                if (closed) return;
+                closed = true; pause();
+                document.removeEventListener('visibilitychange', visibility);
+                toast.classList.add('is-leaving');
+                const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+                window.setTimeout(function () { toast.remove(); if (!stack.children.length) stack.remove(); }, reduced ? 0 : 180);
+            }
+            function visibility() { if (document.hidden) pause(); else resume(); }
+            toast.querySelector('.awpm-toast-dismiss').addEventListener('click', dismiss);
+            toast.addEventListener('mouseenter', function () { hovered = true; pause(); });
+            toast.addEventListener('mouseleave', function () { hovered = false; resume(); });
+            toast.addEventListener('focusin', pause);
+            toast.addEventListener('focusout', function () { window.setTimeout(resume, 0); });
+            toast.addEventListener('keydown', function (event) { if (event.key === 'Escape') { event.preventDefault(); dismiss(); } });
+            document.addEventListener('visibilitychange', visibility);
+            resume();
+        });
+        // Flash messages should not reappear on refresh or when copying the page URL.
+        try {
+            const url = new URL(window.location.href);
+            ['saved', 'awpm_message', 'awpm_error'].forEach(function (key) { url.searchParams.delete(key); });
+            window.history.replaceState(window.history.state, '', url.toString());
+        } catch (ignore) { /* Keep notifications usable if history changes are unavailable. */ }
+    }
     let dirty = false;
     document.querySelectorAll('form.awpm-settings').forEach(function (form) {
         const bar = form.querySelector('.awpm-save-bar') || (form.id ? document.querySelector('.awpm-save-bar button[form="' + form.id + '"]')?.closest('.awpm-save-bar') : null);

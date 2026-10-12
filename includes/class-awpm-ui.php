@@ -4,6 +4,8 @@ defined( 'ABSPATH' ) || exit;
 final class AWPM_UI {
 	public static function icon( $name ) {
 		$paths = array(
+			'close' => 'M6 6l12 12 M18 6L6 18',
+			'alert' => 'M12 3L2 21h20L12 3z M12 9v5 M12 17h.01',
 			'wallet' => 'M4 6h14V4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h15V8H5a2 2 0 0 1-2-2 M20 12h-5v5h5 M16 14.5h.01',
 			'send' => 'M21 3L3 10l7 3 3 8 8-18z M10 13L21 3',
 			'award' => 'M12 3l3 2 3 .5 .5 3 2 3-2 3-.5 3-3 .5-3 2-3-2-3-.5-.5-3-2-3 2-3 .5-3 3-.5 3-2z M8 12l3 3 5-6',
@@ -31,6 +33,12 @@ final class AWPM_UI {
 	public static function metric( $label, $value, $icon, $note = '' ) {
 		$tones = array( 'clock' => 'amber', 'wallet' => 'green', 'payouts' => 'green', 'send' => 'blue', 'sharing' => 'blue', 'award' => 'purple', 'check' => 'purple', 'click' => 'slate', 'user' => 'purple', 'affiliates' => 'purple' );
 		return '<div class="awpm-metric awpm-metric-tone-' . esc_attr( $tones[ $icon ] ?? 'blue' ) . '"><div class="awpm-metric-top"><span>' . esc_html( $label ) . '</span><span class="awpm-icon-tile">' . self::icon( $icon ) . '</span></div><strong>' . wp_kses_post( $value ) . '</strong>' . ( $note ? '<small>' . esc_html( $note ) . '</small>' : '' ) . '</div>';
+	}
+	/** Scoped feedback avoids WordPress moving native .notice elements into our header. */
+	public static function toast( $message, $error = false ) {
+		if ( ! is_scalar( $message ) || '' === trim( (string) $message ) ) { return; }
+		$error = (bool) $error;
+		echo '<div class="awpm-toast awpm-toast-' . ( $error ? 'error' : 'success' ) . '" role="' . ( $error ? 'alert' : 'status' ) . '" aria-live="' . ( $error ? 'assertive' : 'polite' ) . '" aria-atomic="true" data-awpm-toast data-autodismiss="' . ( $error ? 'no' : 'yes' ) . '"><span class="awpm-toast-icon">' . self::icon( $error ? 'alert' : 'check' ) . '</span><div class="awpm-toast-content"><strong>' . esc_html( $error ? __( 'Action needs attention', 'affiliate-wpm' ) : __( 'Action completed', 'affiliate-wpm' ) ) . '</strong><p>' . esc_html( $message ) . '</p></div><button type="button" class="awpm-toast-dismiss awpm-primary" aria-label="' . esc_attr__( 'Dismiss notification', 'affiliate-wpm' ) . '">' . self::icon( 'close' ) . '</button></div>';
 	}
 	public static function footer( $label, $form_id = '' ) {
 		echo '<div class="awpm-save-bar"><span class="awpm-save-state" role="status" aria-live="polite">' . esc_html__( 'Changes apply after saving.', 'affiliate-wpm' ) . '</span><button type="submit"' . ( $form_id ? ' form="' . esc_attr( $form_id ) . '"' : '' ) . ' class="button button-primary awpm-primary">' . self::icon( 'check' ) . esc_html( $label ) . '</button></div>';

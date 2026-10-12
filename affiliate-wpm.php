@@ -26,6 +26,8 @@ require_once AWPM_PATH . 'includes/class-awpm-settings.php';
 require_once AWPM_PATH . 'includes/class-awpm-currency.php';
 require_once AWPM_PATH . 'includes/class-awpm-license.php';
 require_once AWPM_PATH . 'includes/class-awpm-updates.php';
+require_once AWPM_PATH . 'includes/class-awpm-cache.php';
+AWPM_Cache::init();
 AWPM_License::init();
 AWPM_Updates::init();
 add_action( 'admin_post_awpm_currency_recovery', array( 'AWPM_Currency', 'recover' ) );

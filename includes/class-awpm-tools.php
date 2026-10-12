@@ -131,7 +131,7 @@ final class AWPM_Tools {
 	}
 	public static function render() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { return; }
-		$notice = get_transient( 'awpm_tools_notice_' . get_current_user_id() ); if ( is_array( $notice ) ) { delete_transient( 'awpm_tools_notice_' . get_current_user_id() ); echo '<div class="awpm-notice" role="status">' . esc_html( $notice['message'] ?? '' ) . '</div>'; }
+		$notice = get_transient( 'awpm_tools_notice_' . get_current_user_id() ); if ( is_array( $notice ) ) { delete_transient( 'awpm_tools_notice_' . get_current_user_id() ); AWPM_UI::toast( $notice['message'] ?? '', ! empty( $notice['error'] ) ); }
 		if ( current_user_can( 'manage_options' ) ) {
 			$disabled = AWPM_License::active() ? '' : ' disabled';
 			echo '<div class="awpm-form-grid"><section class="awpm-card"><h2>' . AWPM_UI::icon( 'tools' ) . esc_html__( 'Back up settings', 'affiliate-wpm' ) . '</h2><p class="awpm-muted">' . esc_html__( 'Download program, sharing, email and appearance settings as a JSON backup.', 'affiliate-wpm' ) . '</p>'; self::form( 'backup' ); echo '<button class="button awpm-primary">' . esc_html__( 'Download settings backup', 'affiliate-wpm' ) . '</button></form></section>';

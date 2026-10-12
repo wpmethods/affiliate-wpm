@@ -30,8 +30,7 @@ final class AWPM_Sharing {
 		add_action( 'woocommerce_after_add_to_cart_form', array( __CLASS__, 'product_section' ), 20 );
 		add_action( 'template_redirect', function () {
 			if ( is_product() && self::allowed( get_current_user_id() ) && 'yes' === self::get( 'enabled' ) && 'yes' === self::get( 'product_section' ) ) {
-				if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
-				nocache_headers();
+				AWPM_Cache::no_cache( 'Affiliate WPM personalized product sharing' );
 			}
 		} );
 		add_action( 'wp_enqueue_scripts', array( __CLASS__, 'enqueue' ) );

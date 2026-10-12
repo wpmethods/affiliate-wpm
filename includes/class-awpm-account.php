@@ -60,7 +60,7 @@ final class AWPM_Account {
 	public static function render() {
 		global $wpdb;
 		$id = get_current_user_id(); if ( ! $id ) { return; }
-		nocache_headers();
+		AWPM_Cache::no_cache( 'Affiliate WPM customer dashboard' );
 		$user = wp_get_current_user(); $status = AWPM_Affiliates::status( $id );
 		$active = AWPM_Sharing::allowed( $id ); $currency = AWPM_Settings::get( 'currency' );
 		$name = $user->first_name ?: $user->display_name;

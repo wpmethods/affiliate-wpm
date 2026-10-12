@@ -2,6 +2,7 @@
 defined( 'ABSPATH' ) || exit;
 
 final class AWPM_Admin {
+	const PAGE_SIZE = 10;
 	public static function init() {
 		add_action( 'admin_menu', array( __CLASS__, 'menu' ) );
 		add_action( 'admin_enqueue_scripts', function ( $hook ) {
@@ -88,8 +89,8 @@ final class AWPM_Admin {
 		foreach ( $tabs as $key => $label ) { echo '<a class="' . ( $key === $tab ? 'is-active' : '' ) . '" href="' . esc_url( admin_url( 'admin.php?page=affiliate-wpm&tab=' . $key ) ) . '"' . ( $key === $tab ? ' aria-current="page"' : '' ) . '>' . AWPM_UI::icon( 'settings' === $key && ! AWPM_License::active() ? 'lock' : $key ) . '<span>' . esc_html( $label ) . '</span>' . self::pending_badge( $pending_counts[ $key ] ?? 0 ) . '</a>'; }
 		echo '</nav><div class="awpm-sidebar-note">' . AWPM_UI::icon( 'shield' ) . '<strong>' . esc_html__( 'Built for your store', 'affiliate-wpm' ) . '</strong><p>' . esc_html__( 'Simple referrals. Clear earnings. Payouts under your control.', 'affiliate-wpm' ) . '</p></div></aside><main class="awpm-main" id="awpm-main"><div class="awpm-heading"><span class="awpm-eyebrow">' . esc_html__( 'YOUR PARTNER PROGRAM', 'affiliate-wpm' ) . '</span><h2>' . esc_html( $tabs[ $tab ] ) . '</h2><p>' . esc_html( $descriptions[ $tab ] ) . '</p></div>';
 		AWPM_License::activation_notice( true );
-		if ( '1' === AWPM_Security::value( $_GET, 'saved' ) ) { echo '<div class="notice notice-success"><p>' . esc_html__( 'Settings saved.', 'affiliate-wpm' ) . '</p></div>'; }
-		if ( isset( $_GET['awpm_message'] ) && is_scalar( $_GET['awpm_message'] ) ) { echo '<div class="notice ' . ( '1' === AWPM_Security::value( $_GET, 'awpm_error' ) ? 'notice-error' : 'notice-success' ) . '"><p>' . esc_html( sanitize_text_field( wp_unslash( $_GET['awpm_message'] ) ) ) . '</p></div>'; }
+		if ( '1' === AWPM_Security::value( $_GET, 'saved' ) ) { AWPM_UI::toast( __( 'Settings saved.', 'affiliate-wpm' ) ); }
+		if ( isset( $_GET['awpm_message'] ) && is_scalar( $_GET['awpm_message'] ) ) { AWPM_UI::toast( sanitize_text_field( wp_unslash( $_GET['awpm_message'] ) ), '1' === AWPM_Security::value( $_GET, 'awpm_error' ) ); }
 		if ( 'settings' === $tab ) { if ( AWPM_License::active() ) { self::settings(); } else { self::locked_settings(); } }
 		elseif ( 'overview' === $tab ) { self::overview(); }
 		elseif ( 'affiliates' === $tab ) { self::affiliates(); }
@@ -194,7 +195,7 @@ final class AWPM_Admin {
 		foreach ( AWPM_Settings::get( 'methods' ) as $index => $method ) { self::method_row( $index, $method ); }
 		echo '</div><button type="button" class="button awpm-primary" id="awpm-add-method">' . esc_html__( '+ Add payout method', 'affiliate-wpm' ) . '</button><template id="awpm-method-template">';
 		self::method_row( '__INDEX__', array( 'id' => '', 'name' => '', 'instructions' => '', 'active' => 'yes' ) );
-		echo '</template></div></section><section class="awpm-card" id="awpm-products-settings"><h2>' . AWPM_UI::icon( 'link' ) . esc_html__( 'Product commissions & tracking', 'affiliate-wpm' ) . '</h2><p>' . esc_html__( 'Edit a product → Product data → General to set a percentage, fixed amount per unit, or disable commission for that product. Parent product settings cover all variations.', 'affiliate-wpm' ) . '</p><p class="awpm-muted">' . esc_html__( 'Exclude URLs containing awpm_ref from full-page caching so referral cookies can be set. Review the Affiliate WPM privacy policy text in WordPress Settings → Privacy and connect cookie consent through the awpm_tracking_allowed filter when required.', 'affiliate-wpm' ) . '</p></section>';
+		echo '</template></div></section><section class="awpm-card" id="awpm-products-settings"><h2>' . AWPM_UI::icon( 'link' ) . esc_html__( 'Product commissions & tracking', 'affiliate-wpm' ) . '</h2><p>' . esc_html__( 'Edit a product → Product data → General to set a percentage, fixed amount per unit, or disable commission for that product. Parent product settings cover all variations.', 'affiliate-wpm' ) . '</p><p class="awpm-muted">' . esc_html__( 'Caching: exclude awpm_ref query strings from full-page cache, and keep My Account, Cart and Checkout uncached. With LiteSpeed, add awpm_ref under Cache → Excludes → Do Not Cache Query Strings; do not add it to Drop Query String. Hosting/CDN caches must also bypass referral URLs and logged-in users. Purge existing page caches after applying these rules. Guest product pages remain cacheable. Review the Affiliate WPM privacy policy text in WordPress Settings → Privacy and connect cookie consent through the awpm_tracking_allowed filter when required.', 'affiliate-wpm' ) . '</p></section>';
 		echo '<section class="awpm-card" id="awpm-terms-settings"><h2>' . AWPM_UI::icon( 'affiliates' ) . esc_html__( 'Affiliate Terms & Conditions', 'affiliate-wpm' ) . '</h2><p class="awpm-muted">' . esc_html__( 'Customers see this content in the Affiliate Area before joining and must accept it. Leave it empty to join without a terms checkbox. Updates apply to new applications; existing affiliates keep their enrollment.', 'affiliate-wpm' ) . '</p><label for="awpm_terms_content">' . esc_html__( 'Terms & Conditions content', 'affiliate-wpm' ) . '</label>';
 		wp_editor( AWPM_Settings::terms(), 'awpm_terms_content', array( 'textarea_name' => 'awpm[terms_content]', 'textarea_rows' => 10, 'media_buttons' => false, 'teeny' => true, 'quicktags' => array( 'buttons' => 'strong,em,link,ul,ol,li,close' ) ) );
 		echo '</section>';
@@ -210,10 +211,43 @@ final class AWPM_Admin {
 		$user = get_userdata( $id );
 		return $user ? '<strong>' . esc_html( $user->display_name ) . '</strong><small class="awpm-note">' . esc_html( $user->user_email ) . '</small>' : '#' . absint( $id );
 	}
+	private static function search_term() {
+		return mb_substr( sanitize_text_field( wp_unslash( AWPM_Security::value( $_GET, 'q' ) ) ), 0, 160 );
+	}
+	private static function list_statuses( $tab ) {
+		return 'affiliates' === $tab ? array( 'pending', 'approved', 'rejected', 'blocked' ) : ( 'payouts' === $tab ? array( 'pending', 'approved', 'completed', 'rejected' ) : array( 'pending', 'available', 'reserved', 'paid', 'rejected' ) );
+	}
+	private static function list_status( $tab ) {
+		$status = sanitize_key( AWPM_Security::value( $_GET, 'status' ) );
+		return in_array( $status, self::list_statuses( $tab ), true ) ? $status : '';
+	}
+	private static function filters( $tab ) {
+		$search = self::search_term(); $status = self::list_status( $tab );
+		$placeholder = 'affiliates' === $tab ? __( 'Name, email or user ID', 'affiliate-wpm' ) : ( 'commissions' === $tab ? __( 'Affiliate, email, order or commission ID', 'affiliate-wpm' ) : __( 'Affiliate, email or withdrawal ID', 'affiliate-wpm' ) );
+		echo '<form class="awpm-list-filters" method="get" action="' . esc_url( admin_url( 'admin.php' ) ) . '"><input type="hidden" name="page" value="affiliate-wpm"><input type="hidden" name="tab" value="' . esc_attr( $tab ) . '"><label class="screen-reader-text" for="awpm-list-search">' . esc_html__( 'Search records', 'affiliate-wpm' ) . '</label><input type="search" id="awpm-list-search" name="q" value="' . esc_attr( $search ) . '" maxlength="160" placeholder="' . esc_attr( $placeholder ) . '"><label class="screen-reader-text" for="awpm-status-filter">' . esc_html__( 'Filter status', 'affiliate-wpm' ) . '</label><select id="awpm-status-filter" name="status"><option value="">' . esc_html__( 'All statuses', 'affiliate-wpm' ) . '</option>';
+		foreach ( self::list_statuses( $tab ) as $option ) { echo '<option value="' . esc_attr( $option ) . '"' . selected( $status, $option, false ) . '>' . esc_html( 'blocked' === $option ? __( 'Blocked', 'affiliate-wpm' ) : wp_strip_all_tags( AWPM_Store::status( $option ) ) ) . '</option>'; }
+		echo '</select><button type="submit" class="button awpm-primary">' . esc_html__( 'Search', 'affiliate-wpm' ) . '</button>';
+		if ( '' !== $search || '' !== $status ) { echo '<a class="awpm-filter-reset" href="' . esc_url( add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => $tab ), admin_url( 'admin.php' ) ) ) . '">' . esc_html__( 'Reset', 'affiliate-wpm' ) . '</a>'; }
+		echo '</form>';
+	}
 	private static function affiliates() {
 		$page = AWPM_Security::page( $_GET, 'paged' );
-		$query = new WP_User_Query( array( 'meta_key' => '_awpm_enrolled', 'meta_value' => 'yes', 'number' => 20, 'offset' => ( $page - 1 ) * 20, 'orderby' => 'ID', 'order' => 'DESC' ) );
-		echo '<section class="awpm-card"><h2>' . esc_html__( 'Affiliates', 'affiliate-wpm' ) . '</h2><div class="awpm-table-scroll"><table><thead><tr><th>' . esc_html__( 'Affiliate', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Available balance', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Clicks', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Registered customers', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Account', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Action', 'affiliate-wpm' ) . '</th></tr></thead><tbody>';
+		$args = array( 'meta_key' => '_awpm_enrolled', 'meta_value' => 'yes', 'number' => self::PAGE_SIZE, 'offset' => ( $page - 1 ) * self::PAGE_SIZE, 'orderby' => 'ID', 'order' => 'DESC' );
+		$search = self::search_term(); $status = self::list_status( 'affiliates' );
+		if ( '' !== $search ) { $args['search'] = '*' . ltrim( $search, '#' ) . '*'; $args['search_columns'] = array( 'user_login', 'user_email', 'display_name', 'ID' ); }
+		if ( 'blocked' === $status ) { $args['meta_query'] = array( array( 'key' => '_awpm_blocked', 'value' => 'yes' ) ); }
+		elseif ( '' !== $status ) {
+			$args['meta_query'] = array( 'relation' => 'AND', array( 'relation' => 'OR', array( 'key' => '_awpm_blocked', 'compare' => 'NOT EXISTS' ), array( 'key' => '_awpm_blocked', 'value' => 'yes', 'compare' => '!=' ) ) );
+			$args['meta_query'][] = 'approved' === $status ? array( 'relation' => 'OR', array( 'key' => '_awpm_approval', 'compare' => 'NOT EXISTS' ), array( 'key' => '_awpm_approval', 'value' => array( 'pending', 'rejected' ), 'compare' => 'NOT IN' ) ) : array( 'key' => '_awpm_approval', 'value' => $status );
+		}
+		$query = new WP_User_Query( $args );
+		$count = (int) $query->get_total();
+		$last = max( 1, (int) ceil( $count / self::PAGE_SIZE ) );
+		if ( $page > $last ) {
+			$page = $last; $args['offset'] = ( $page - 1 ) * self::PAGE_SIZE; $args['count_total'] = false;
+			$query = new WP_User_Query( $args );
+		}
+		echo '<section class="awpm-card"><div class="awpm-card-toolbar"><h2>' . esc_html__( 'Affiliates', 'affiliate-wpm' ) . '</h2>'; self::filters( 'affiliates' ); echo '</div><div class="awpm-table-scroll"><table><thead><tr><th>' . esc_html__( 'Affiliate', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Available balance', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Clicks', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Registered customers', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Account', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Action', 'affiliate-wpm' ) . '</th></tr></thead><tbody>';
 		foreach ( $query->get_results() as $user ) {
 			$blocked = 'yes' === get_user_meta( $user->ID, '_awpm_blocked', true );
 			$stats = AWPM_Store::referral_stats( $user->ID );
@@ -224,21 +258,32 @@ final class AWPM_Admin {
 			foreach ( $actions as $operation => $label ) { echo '<button class="button awpm-primary" name="operation" value="' . esc_attr( $operation ) . '">' . esc_html( $label ) . '</button>'; }
 			echo '</form></td></tr>';
 		}
-		if ( ! $query->get_results() ) { echo '<tr><td colspan="6" class="awpm-empty">' . esc_html__( 'Customers who join the program will appear here.', 'affiliate-wpm' ) . '</td></tr>'; }
-		echo '</tbody></table></div>'; self::pagination( $query->get_total(), $page, 'affiliates' ); echo '</section>';
+		if ( ! $query->get_results() ) { echo '<tr><td colspan="6" class="awpm-empty">' . esc_html( '' !== $search || '' !== $status ? __( 'No affiliates match your search or filters.', 'affiliate-wpm' ) : __( 'Customers who join the program will appear here.', 'affiliate-wpm' ) ) . '</td></tr>'; }
+		echo '</tbody></table></div>'; self::pagination( $count, $page, 'affiliates', $status ); echo '</section>';
 	}
 	private static function records( $type ) {
 		global $wpdb;
 		$table = AWPM_Store::table( $type );
 		$page = AWPM_Security::page( $_GET, 'paged' );
-		$allowed = 'payouts' === $type ? array( 'pending', 'approved', 'completed', 'rejected' ) : array( 'pending', 'available', 'reserved', 'paid', 'rejected' );
-		$status = sanitize_key( AWPM_Security::value( $_GET, 'status' ) );
-		$where = in_array( $status, $allowed, true ) ? $wpdb->prepare( 'WHERE status=%s', $status ) : '';
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table $where" );
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $table $where ORDER BY id DESC LIMIT 20 OFFSET %d", ( $page - 1 ) * 20 ) );
-		echo '<section class="awpm-card"><div class="awpm-section-heading"><h2>' . esc_html( 'payouts' === $type ? __( 'Withdrawal requests', 'affiliate-wpm' ) : __( 'Commission ledger', 'affiliate-wpm' ) ) . '</h2><form method="get"><input type="hidden" name="page" value="affiliate-wpm"><input type="hidden" name="tab" value="' . esc_attr( $type ) . '"><label class="screen-reader-text" for="awpm-status-filter">' . esc_html__( 'Filter status', 'affiliate-wpm' ) . '</label><select id="awpm-status-filter" name="status"><option value="">' . esc_html__( 'All statuses', 'affiliate-wpm' ) . '</option>';
-		foreach ( $allowed as $option ) { echo '<option value="' . esc_attr( $option ) . '"' . selected( $status, $option, false ) . '>' . esc_html( wp_strip_all_tags( AWPM_Store::status( $option ) ) ) . '</option>'; }
-		echo '</select> <button class="button awpm-primary">' . esc_html__( 'Filter', 'affiliate-wpm' ) . '</button></form></div>';
+		$status = self::list_status( $type ); $search = self::search_term();
+		$clauses = array(); $join = '';
+		if ( '' !== $status ) { $clauses[] = $wpdb->prepare( 'r.status=%s', $status ); }
+		if ( '' !== $search ) {
+			$join = " LEFT JOIN $wpdb->users u ON u.ID=r.affiliate_id";
+			$like = '%' . $wpdb->esc_like( $search ) . '%';
+			$match = $wpdb->prepare( '(u.user_login LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s)', $like, $like, $like );
+			$number = ltrim( $search, '#' );
+			if ( ctype_digit( $number ) && strlen( $number ) <= 18 ) {
+				$match .= $wpdb->prepare( ' OR r.id=%d OR r.affiliate_id=%d', (int) $number, (int) $number );
+				if ( 'commissions' === $type ) { $match .= $wpdb->prepare( ' OR r.order_id=%d', (int) $number ); }
+			}
+			$clauses[] = '(' . $match . ')';
+		}
+		$where = $clauses ? ' WHERE ' . implode( ' AND ', $clauses ) : '';
+		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table r$join$where" );
+		$page = min( $page, max( 1, (int) ceil( $count / self::PAGE_SIZE ) ) );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT r.* FROM $table r$join$where ORDER BY r.id DESC LIMIT %d OFFSET %d", self::PAGE_SIZE, ( $page - 1 ) * self::PAGE_SIZE ) );
+		echo '<section class="awpm-card"><div class="awpm-card-toolbar"><h2>' . esc_html( 'payouts' === $type ? __( 'Withdrawal requests', 'affiliate-wpm' ) : __( 'Commission ledger', 'affiliate-wpm' ) ) . '</h2>'; self::filters( $type ); echo '</div>';
 		if ( 'payouts' === $type ) { echo '<p class="awpm-muted">' . esc_html__( 'Approve → send payment using the destination details → mark completed. Completing a withdrawal records your payment; it does not transfer funds. Notes are visible to the affiliate.', 'affiliate-wpm' ) . '</p>'; }
 		echo '<div class="awpm-table-scroll"><table><thead><tr><th>#</th><th>' . esc_html__( 'Affiliate', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Amount', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Status', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Date', 'affiliate-wpm' ) . '</th><th>' . esc_html( 'payouts' === $type ? __( 'Payment & action', 'affiliate-wpm' ) : __( 'Order / paid', 'affiliate-wpm' ) ) . '</th></tr></thead><tbody>';
 		foreach ( $rows as $row ) {
@@ -266,12 +311,18 @@ final class AWPM_Admin {
 		echo '</tbody></table></div>'; self::pagination( $count, $page, $type, $status ); echo '</section>';
 	}
 	private static function pagination( $count, $page, $tab, $status = '' ) {
-		if ( $count <= 20 ) { return; }
-		$base = add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => $tab, 'status' => $status ), admin_url( 'admin.php' ) );
-		echo '<nav class="awpm-pagination">';
-		if ( $page > 1 ) { echo '<a class="button awpm-primary" href="' . esc_url( add_query_arg( 'paged', $page - 1, $base ) ) . '">' . esc_html__( 'Previous', 'affiliate-wpm' ) . '</a>'; }
-		echo '<span>' . sprintf( esc_html__( 'Page %1$d of %2$d', 'affiliate-wpm' ), $page, (int) ceil( $count / 20 ) ) . '</span>';
-		if ( $page * 20 < $count ) { echo '<a class="button awpm-primary" href="' . esc_url( add_query_arg( 'paged', $page + 1, $base ) ) . '">' . esc_html__( 'Next', 'affiliate-wpm' ) . '</a>'; }
-		echo '</nav>';
+		$total = (int) ceil( $count / self::PAGE_SIZE );
+		if ( $total <= 1 ) { return; }
+		$page = min( max( 1, $page ), $total );
+		$base = add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => $tab, 'status' => $status, 'q' => self::search_term(), 'paged' => 999999999 ), admin_url( 'admin.php' ) );
+		$clean_url = function ( $url ) { return remove_query_arg( array( 'saved', 'awpm_message', 'awpm_error' ), $url ); };
+		add_filter( 'get_pagenum_link', $clean_url );
+		try { $links = paginate_links( array( 'base' => str_replace( '999999999', '%#%', $base ), 'format' => '', 'current' => $page, 'total' => $total, 'type' => 'array', 'add_args' => false, 'mid_size' => 1, 'end_size' => 1, 'prev_text' => __( 'Previous', 'affiliate-wpm' ), 'next_text' => __( 'Next', 'affiliate-wpm' ) ) ); } finally { remove_filter( 'get_pagenum_link', $clean_url ); }
+		echo '<nav class="awpm-pagination awpm-admin-pagination" aria-label="' . esc_attr__( 'List pages', 'affiliate-wpm' ) . '"><span class="awpm-page-summary">' . sprintf( esc_html__( 'Page %1$d of %2$d', 'affiliate-wpm' ), $page, $total ) . '</span><div class="awpm-page-links">';
+		foreach ( (array) $links as $link ) {
+			$link = preg_replace( '/(<a\s[^>]*class=")([^"]*)(")/', '$1$2 awpm-primary$3', $link );
+			echo wp_kses_post( $link );
+		}
+		echo '</div></nav>';
 	}
 }
