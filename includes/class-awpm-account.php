@@ -86,15 +86,16 @@ final class AWPM_Account {
 		$user = wp_get_current_user(); $status = AWPM_Affiliates::status( $id );
 		$active = AWPM_Sharing::allowed( $id ); $currency = AWPM_Settings::get( 'currency' );
 		$name = $user->first_name ?: $user->display_name;
+		/* translators: %s: affiliate display name. */
 		echo '<div class="awpm awpm-account"><header class="awpm-account-hero"><div><span class="awpm-eyebrow">' . esc_html__( 'YOUR PARTNER SPACE', 'affiliate-wpm' ) . '</span><h2>' . esc_html__( 'Affiliate Area', 'affiliate-wpm' ) . '</h2><p>' . sprintf( esc_html__( 'Hello %s. Share your favorites and follow your earnings.', 'affiliate-wpm' ), esc_html( $name ) ) . '</p></div><div class="awpm-hero-side">';
 		if ( 'none' !== $status ) { echo wp_kses_post( AWPM_Store::status( $active ? 'approved' : ( 'approved' === $status ? 'paused' : $status ) ) ); }
-		else { echo '<span class="awpm-hero-mark">' . AWPM_UI::icon( 'sharing' ) . '</span>'; }
+		else { echo '<span class="awpm-hero-mark">' . wp_kses( AWPM_UI::icon( 'sharing' ), AWPM_UI::allowed_html() ) . '</span>'; }
 		echo '</div></header>';
 		if ( 'none' === $status ) {
-			echo '<section class="awpm-card awpm-onboarding"><span class="awpm-icon-tile">' . AWPM_UI::icon( 'link' ) . '</span><h3>' . esc_html( AWPM_Settings::get( 'join_title' ) ) . '</h3>' . ( '' !== trim( AWPM_Settings::get( 'join_description' ) ) ? '<p>' . nl2br( esc_html( AWPM_Settings::get( 'join_description' ) ) ) . '</p>' : '' ) . '<ol class="awpm-onboarding-steps"><li><strong>' . esc_html__( 'Join the program', 'affiliate-wpm' ) . '</strong><span>' . esc_html__( 'Create your affiliate account from here.', 'affiliate-wpm' ) . '</span></li><li><strong>' . esc_html__( 'Share your link', 'affiliate-wpm' ) . '</strong><span>' . esc_html__( 'Recommend a product or a page you love.', 'affiliate-wpm' ) . '</span></li><li><strong>' . esc_html__( 'Earn & withdraw', 'affiliate-wpm' ) . '</strong><span>' . esc_html__( 'Completed orders release eligible earnings.', 'affiliate-wpm' ) . '</span></li></ol>';
+			echo '<section class="awpm-card awpm-onboarding"><span class="awpm-icon-tile">' . wp_kses( AWPM_UI::icon( 'link' ), AWPM_UI::allowed_html() ) . '</span><h3>' . esc_html( AWPM_Settings::get( 'join_title' ) ) . '</h3>' . ( '' !== trim( AWPM_Settings::get( 'join_description' ) ) ? '<p>' . nl2br( esc_html( AWPM_Settings::get( 'join_description' ) ) ) . '</p>' : '' ) . '<ol class="awpm-onboarding-steps"><li><strong>' . esc_html__( 'Join the program', 'affiliate-wpm' ) . '</strong><span>' . esc_html__( 'Create your affiliate account from here.', 'affiliate-wpm' ) . '</span></li><li><strong>' . esc_html__( 'Share your link', 'affiliate-wpm' ) . '</strong><span>' . esc_html__( 'Recommend a product or a page you love.', 'affiliate-wpm' ) . '</span></li><li><strong>' . esc_html__( 'Earn & withdraw', 'affiliate-wpm' ) . '</strong><span>' . esc_html__( 'Completed orders release eligible earnings.', 'affiliate-wpm' ) . '</span></li></ol>';
 			if ( 'yes' === AWPM_Settings::get( 'join_show_rate' ) ) {
 				$rate = 'percent' === AWPM_Settings::get( 'commission_type' ) ? esc_html( wc_format_decimal( AWPM_Settings::get( 'commission_rate' ), 6, true ) . '%' ) : wp_kses_post( AWPM_Store::money( AWPM_Settings::get( 'commission_rate' ), $currency ) ) . ' ' . esc_html__( 'per purchased unit', 'affiliate-wpm' );
-				echo '<div class="awpm-join-commission"><strong>' . esc_html__( 'Default commission:', 'affiliate-wpm' ) . ' ' . $rate . '</strong><p class="awpm-muted">' . esc_html__( 'Individual products may have different commission rates. Commissions apply to eligible purchases.', 'affiliate-wpm' ) . '</p></div>';
+				echo '<div class="awpm-join-commission"><strong>' . esc_html__( 'Default commission:', 'affiliate-wpm' ) . ' ' . wp_kses_post( $rate ) . '</strong><p class="awpm-muted">' . esc_html__( 'Individual products may have different commission rates. Commissions apply to eligible purchases.', 'affiliate-wpm' ) . '</p></div>';
 			}
 			if ( AWPM_Settings::program_enabled() && 'yes' !== get_user_meta( $id, '_awpm_blocked', true ) ) {
 				echo '<form method="post">'; wp_nonce_field( 'awpm_account' );
@@ -104,12 +105,12 @@ final class AWPM_Account {
 				if ( '' !== $terms ) {
 					echo '<section class="awpm-join-terms" aria-labelledby="awpm-terms-title"><h3 id="awpm-terms-title">' . esc_html__( 'Terms & Conditions', 'affiliate-wpm' ) . '</h3><div class="awpm-terms-content" tabindex="0" role="region" aria-labelledby="awpm-terms-title">' . wp_kses_post( wpautop( $terms ) ) . '</div><label class="awpm-terms-accept"><input type="checkbox" name="awpm_accept_terms" value="yes" required><span>' . esc_html__( 'I have read and agree to the affiliate Terms & Conditions.', 'affiliate-wpm' ) . '</span></label><input type="hidden" name="awpm_terms_version" value="' . esc_attr( AWPM_Settings::terms_version() ) . '"></section>';
 				}
-				echo '<input type="hidden" name="awpm_action" value="join"><button class="button awpm-primary">' . esc_html( AWPM_Settings::get( 'join_button_text' ) ) . AWPM_UI::icon( 'arrow' ) . '</button></form><p class="awpm-muted">' . esc_html( 'yes' === AWPM_Settings::get( 'approval_required' ) ? __( 'Your application will be reviewed by the store.', 'affiliate-wpm' ) : __( 'Join now to get your personal referral link.', 'affiliate-wpm' ) ) . '</p>';
+				echo '<input type="hidden" name="awpm_action" value="join"><button class="button awpm-primary">' . esc_html( AWPM_Settings::get( 'join_button_text' ) ) . wp_kses( AWPM_UI::icon( 'arrow' ), AWPM_UI::allowed_html() ) . '</button></form><p class="awpm-muted">' . esc_html( 'yes' === AWPM_Settings::get( 'approval_required' ) ? __( 'Your application will be reviewed by the store.', 'affiliate-wpm' ) : __( 'Join now to get your personal referral link.', 'affiliate-wpm' ) ) . '</p>';
 			} else { echo '<p class="awpm-notice">' . esc_html__( 'Enrollment is currently unavailable.', 'affiliate-wpm' ) . '</p>'; }
 			echo '</section></div>'; return;
 		}
 		if ( in_array( $status, array( 'pending', 'rejected' ), true ) ) {
-			echo '<section class="awpm-card awpm-application"><span class="awpm-icon-tile">' . AWPM_UI::icon( 'clock' ) . '</span><h3>' . esc_html__( 'Affiliate application', 'affiliate-wpm' ) . '</h3><p>' . esc_html( 'pending' === $status ? __( 'Your application is awaiting administrator approval. Your links and withdrawal tools will be ready once you are approved.', 'affiliate-wpm' ) : __( 'Your application was rejected. Please contact the store if you have questions.', 'affiliate-wpm' ) ) . '</p></section></div>'; return;
+			echo '<section class="awpm-card awpm-application"><span class="awpm-icon-tile">' . wp_kses( AWPM_UI::icon( 'clock' ), AWPM_UI::allowed_html() ) . '</span><h3>' . esc_html__( 'Affiliate application', 'affiliate-wpm' ) . '</h3><p>' . esc_html( 'pending' === $status ? __( 'Your application is awaiting administrator approval. Your links and withdrawal tools will be ready once you are approved.', 'affiliate-wpm' ) : __( 'Your application was rejected. Please contact the store if you have questions.', 'affiliate-wpm' ) ) . '</p></section></div>'; return;
 		}
 		echo '<nav class="awpm-account-nav" aria-label="' . esc_attr__( 'Affiliate sections', 'affiliate-wpm' ) . '">';
 		foreach ( array( 'earnings' => __( 'Overview', 'affiliate-wpm' ), 'sharing' => __( 'Sharing tools', 'affiliate-wpm' ), 'withdraw' => __( 'Withdraw', 'affiliate-wpm' ), 'commissions' => __( 'History', 'affiliate-wpm' ), 'customers' => __( 'Customers', 'affiliate-wpm' ) ) as $key => $label ) { echo '<a href="#awpm-' . esc_attr( $key ) . '">' . esc_html( $label ) . '</a>'; }
@@ -121,21 +122,23 @@ final class AWPM_Account {
 		$paid = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(paid_amount),0) FROM $commissions WHERE affiliate_id=%d AND currency=%s", $id, $currency ) );
 		$balance = AWPM_Store::balance( $id, $currency );
 		echo '<div class="awpm-metrics" id="awpm-earnings">';
-		echo AWPM_UI::metric( __( 'Available balance', 'affiliate-wpm' ), AWPM_Store::money( $balance, $currency ), 'wallet', __( 'Ready for withdrawal', 'affiliate-wpm' ) );
-		echo AWPM_UI::metric( __( 'Pending earnings', 'affiliate-wpm' ), AWPM_Store::money( $pending, $currency ), 'clock', __( 'Awaiting order completion or the waiting period', 'affiliate-wpm' ) );
-		echo AWPM_UI::metric( __( 'In withdrawal', 'affiliate-wpm' ), AWPM_Store::money( $reserved, $currency ), 'send', __( 'Requests in progress', 'affiliate-wpm' ) );
-		echo AWPM_UI::metric( __( 'Total paid out', 'affiliate-wpm' ), AWPM_Store::money( $paid, $currency ), 'award', __( 'Completed payouts', 'affiliate-wpm' ) );
+		echo wp_kses( AWPM_UI::metric( __( 'Available balance', 'affiliate-wpm' ), AWPM_Store::money( $balance, $currency ), 'wallet', __( 'Ready for withdrawal', 'affiliate-wpm' ) ), AWPM_UI::allowed_html() );
+		echo wp_kses( AWPM_UI::metric( __( 'Pending earnings', 'affiliate-wpm' ), AWPM_Store::money( $pending, $currency ), 'clock', __( 'Awaiting order completion or the waiting period', 'affiliate-wpm' ) ), AWPM_UI::allowed_html() );
+		echo wp_kses( AWPM_UI::metric( __( 'In withdrawal', 'affiliate-wpm' ), AWPM_Store::money( $reserved, $currency ), 'send', __( 'Requests in progress', 'affiliate-wpm' ) ), AWPM_UI::allowed_html() );
+		echo wp_kses( AWPM_UI::metric( __( 'Total paid out', 'affiliate-wpm' ), AWPM_Store::money( $paid, $currency ), 'award', __( 'Completed payouts', 'affiliate-wpm' ) ), AWPM_UI::allowed_html() );
 		$stats = AWPM_Store::referral_stats( $id );
-		echo '</div><div class="awpm-referral-metrics">' . AWPM_UI::metric( __( 'Referral clicks', 'affiliate-wpm' ), number_format_i18n( $stats['clicks'] ), 'click' ) . AWPM_UI::metric( __( 'Registered customers', 'affiliate-wpm' ), number_format_i18n( $stats['customers'] ), 'user' ) . '</div><details class="awpm-stat-help"><summary>' . esc_html__( 'How your activity is counted', 'affiliate-wpm' ) . '</summary><p>' . esc_html__( 'Consecutive clicks on the same referral count once per browser within 30 minutes. Registered customers are new accounts created through your referral cookie. These statistics start from when tracking was enabled.', 'affiliate-wpm' ) . '</p></details><div class="awpm-grid awpm-account-tools"><section class="awpm-card awpm-link-card" id="awpm-sharing"><div class="awpm-card-heading"><span class="awpm-icon-tile">' . AWPM_UI::icon( 'link' ) . '</span><div><h3>' . esc_html__( 'Your referral link', 'affiliate-wpm' ) . '</h3><p>' . esc_html__( 'One link to share your favorite store.', 'affiliate-wpm' ) . '</p></div></div>';
+		echo '</div><div class="awpm-referral-metrics">' . wp_kses( AWPM_UI::metric( __( 'Referral clicks', 'affiliate-wpm' ), number_format_i18n( $stats['clicks'] ), 'click' ), AWPM_UI::allowed_html() ) . wp_kses( AWPM_UI::metric( __( 'Registered customers', 'affiliate-wpm' ), number_format_i18n( $stats['customers'] ), 'user' ), AWPM_UI::allowed_html() ) . '</div><details class="awpm-stat-help"><summary>' . esc_html__( 'How your activity is counted', 'affiliate-wpm' ) . '</summary><p>' . esc_html__( 'Consecutive clicks on the same referral count once per browser within 30 minutes. Registered customers are new accounts created through your referral cookie. These statistics start from when tracking was enabled.', 'affiliate-wpm' ) . '</p></details><div class="awpm-grid awpm-account-tools"><section class="awpm-card awpm-link-card" id="awpm-sharing"><div class="awpm-card-heading"><span class="awpm-icon-tile">' . wp_kses( AWPM_UI::icon( 'link' ), AWPM_UI::allowed_html() ) . '</span><div><h3>' . esc_html__( 'Your referral link', 'affiliate-wpm' ) . '</h3><p>' . esc_html__( 'One link to share your favorite store.', 'affiliate-wpm' ) . '</p></div></div>';
 		if ( $active ) {
 			$link = add_query_arg( AWPM_Settings::referral_parameter(), AWPM_Tracking::token( $id ), home_url( '/' ) );
+		/* translators: %d: referral cookie lifetime in days. */
 			echo '<label for="awpm-ref-link" class="screen-reader-text">' . esc_html__( 'Referral link', 'affiliate-wpm' ) . '</label><div class="awpm-copy"><input id="awpm-ref-link" readonly value="' . esc_attr( $link ) . '"><button type="button" class="button awpm-primary" data-awpm-copy data-copied="' . esc_attr__( 'Copied!', 'affiliate-wpm' ) . '">' . esc_html__( 'Copy', 'affiliate-wpm' ) . '</button></div><p class="awpm-muted awpm-link-hint">' . sprintf( esc_html__( 'Referral cookie: %d days. Self-referrals do not earn commission.', 'affiliate-wpm' ), (int) AWPM_Settings::get( 'cookie_days' ) ) . '</p><p class="awpm-copy-feedback" role="status" aria-live="polite"></p>';
 			AWPM_Sharing::generator();
 			self::best_sellers( $id );
 		} else { echo '<p class="awpm-muted">' . esc_html__( 'Your sharing tools will return when your affiliate account and the program are active.', 'affiliate-wpm' ) . '</p>'; }
-		echo '</section><section class="awpm-card awpm-withdraw-card" id="awpm-withdraw"><div class="awpm-card-heading"><span class="awpm-icon-tile">' . AWPM_UI::icon( 'payouts' ) . '</span><div><h3>' . esc_html__( 'Request a withdrawal', 'affiliate-wpm' ) . '</h3><p>' . esc_html__( 'Choose how you receive your earnings.', 'affiliate-wpm' ) . '</p></div></div>';
+		echo '</section><section class="awpm-card awpm-withdraw-card" id="awpm-withdraw"><div class="awpm-card-heading"><span class="awpm-icon-tile">' . wp_kses( AWPM_UI::icon( 'payouts' ), AWPM_UI::allowed_html() ) . '</span><div><h3>' . esc_html__( 'Request a withdrawal', 'affiliate-wpm' ) . '</h3><p>' . esc_html__( 'Choose how you receive your earnings.', 'affiliate-wpm' ) . '</p></div></div>';
 		$minimum = max( 0.01, (float) AWPM_Settings::get( 'minimum' ) );
 		echo '<div class="awpm-withdraw-balance"><span>' . esc_html__( 'Available to withdraw', 'affiliate-wpm' ) . '</span><strong>' . wp_kses_post( AWPM_Store::money( $balance, $currency ) ) . '</strong><p class="awpm-muted">' . esc_html__( 'Minimum withdrawal:', 'affiliate-wpm' ) . ' ' . wp_kses_post( AWPM_Store::money( $minimum, $currency ) ) . '</p>';
+		/* translators: %s: formatted amount needed to reach the withdrawal minimum. */
 		if ( $balance < $minimum ) { echo '<progress max="' . esc_attr( $minimum ) . '" value="' . esc_attr( max( 0, $balance ) ) . '" aria-label="' . esc_attr__( 'Progress toward minimum withdrawal', 'affiliate-wpm' ) . '"></progress><p class="awpm-muted">' . sprintf( esc_html__( '%s more to reach your minimum.', 'affiliate-wpm' ), wp_kses_post( AWPM_Store::money( $minimum - $balance, $currency ) ) ) . '</p>'; }
 		echo '</div>';
 		AWPM_Gateways::connection_ui( $id );
@@ -144,7 +147,7 @@ final class AWPM_Account {
 			echo '<form method="post" class="awpm-withdraw">'; wp_nonce_field( 'awpm_account' );
 			echo '<input type="hidden" name="awpm_action" value="withdraw"><label for="awpm-method">' . esc_html__( 'Payout method', 'affiliate-wpm' ) . '</label><select id="awpm-method" name="method">';
 			foreach ( $methods as $method ) { echo '<option value="' . esc_attr( $method['id'] ) . '" data-provider="' . esc_attr( $method['provider'] ?? 'manual' ) . '" data-instructions="' . esc_attr( $method['instructions'] ) . '">' . esc_html( $method['name'] ) . '</option>'; }
-			echo '</select><p id="awpm-instructions" class="awpm-muted">' . esc_html( $methods[0]['instructions'] ) . '</p><label for="awpm-details">' . esc_html__( 'Payment destination details', 'affiliate-wpm' ) . '</label><textarea id="awpm-details" name="details" rows="3" required minlength="3" maxlength="2000"></textarea><p class="awpm-muted">' . esc_html__( 'Enter only the details needed to receive payment. Never share passwords or card security codes.', 'affiliate-wpm' ) . '</p><button class="button awpm-primary"' . disabled( $balance < $minimum, true, false ) . '>' . esc_html__( 'Withdraw available balance', 'affiliate-wpm' ) . AWPM_UI::icon( 'arrow' ) . '</button></form>';
+			echo '</select><p id="awpm-instructions" class="awpm-muted">' . esc_html( $methods[0]['instructions'] ) . '</p><label for="awpm-details">' . esc_html__( 'Payment destination details', 'affiliate-wpm' ) . '</label><textarea id="awpm-details" name="details" rows="3" required minlength="3" maxlength="2000"></textarea><p class="awpm-muted">' . esc_html__( 'Enter only the details needed to receive payment. Never share passwords or card security codes.', 'affiliate-wpm' ) . '</p><button class="button awpm-primary"' . disabled( $balance < $minimum, true, false ) . '>' . esc_html__( 'Withdraw available balance', 'affiliate-wpm' ) . wp_kses( AWPM_UI::icon( 'arrow' ), AWPM_UI::allowed_html() ) . '</button></form>';
 		} else { echo '<p class="awpm-notice">' . esc_html( $open ? __( 'Your withdrawal is being reviewed. Follow its status in the history below.', 'affiliate-wpm' ) : __( 'Withdrawals are currently unavailable.', 'affiliate-wpm' ) ) . '</p>'; }
 		echo '</section></div><p class="awpm-muted awpm-balance-note">' . esc_html__( 'Refunds adjust your earnings. Refunds after a payout reduce future earnings. History keeps each transaction in its original currency.', 'affiliate-wpm' ) . '</p>';
 		self::history( 'commissions', $id ); self::history( 'payouts', $id ); self::customers( $id ); echo '</div>';
@@ -173,6 +176,7 @@ final class AWPM_Account {
 			$url = $product->get_permalink(); $link = AWPM_Sharing::link( $id, $url );
 			if ( is_wp_error( $link ) ) { continue; }
 			$shown++;
+		/* translators: %s: product name. */
 			echo '<li><span class="awpm-best-seller-rank" aria-hidden="true">' . esc_html( $shown ) . '</span><a class="awpm-best-seller-product" href="' . esc_url( $url ) . '">' . wp_kses_post( $product->get_image( 'woocommerce_thumbnail', array( 'loading' => 'lazy', 'alt' => '' ) ) ) . '<span>' . esc_html( $product->get_name() ) . '</span></a><button type="button" class="button awpm-primary" data-awpm-copy data-awpm-url="' . esc_attr( $link ) . '" data-copied="' . esc_attr__( 'Copied!', 'affiliate-wpm' ) . '" data-copy-failed="' . esc_attr__( 'Could not copy. Please try again.', 'affiliate-wpm' ) . '" aria-label="' . esc_attr( sprintf( __( 'Copy affiliate link for %s', 'affiliate-wpm' ), $product->get_name() ) ) . '">' . esc_html__( 'Copy link', 'affiliate-wpm' ) . '</button></li>';
 		}
 		echo '</ol>';
@@ -217,7 +221,8 @@ final class AWPM_Account {
 				$args[ $key ] = $page + $step;
 				echo '<a class="button awpm-primary" href="' . esc_url( add_query_arg( $args, wc_get_account_endpoint_url( 'affiliate-wpm' ) ) . '#' . $anchor ) . '">' . esc_html( $label ) . '</a>';
 			}
-			if ( -1 === $step ) { echo '<span>' . sprintf( esc_html__( 'Page %1$d of %2$d', 'affiliate-wpm' ), $page, (int) ceil( $count / 10 ) ) . '</span>'; }
+		/* translators: %1$d: current page, %2$d: total pages. */
+			if ( -1 === $step ) { echo '<span>' . sprintf( esc_html__( 'Page %1$d of %2$d', 'affiliate-wpm' ), esc_html( $page ), (int) ceil( $count / 10 ) ) . '</span>'; }
 		}
 		echo '</nav>';
 	}
@@ -228,7 +233,7 @@ final class AWPM_Account {
 		$page = min( AWPM_Security::page( $_GET, 'awpm_rp' ), max( 1, (int) ceil( $count / 10 ) ) );
 		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT customer_id FROM $table WHERE affiliate_id=%d ORDER BY created_at DESC,customer_id DESC LIMIT 10 OFFSET %d", $id, ( $page - 1 ) * 10 ) );
 		if ( $ids ) { update_meta_cache( 'user', $ids ); }
-		echo '<section class="awpm-card awpm-history" id="awpm-customers"><h3>' . AWPM_UI::icon( 'affiliates' ) . esc_html__( 'Your registered customers', 'affiliate-wpm' ) . '</h3><p class="awpm-muted">' . esc_html__( 'Only first names and masked contact details are shown.', 'affiliate-wpm' ) . '</p><div class="awpm-table-scroll"><table><thead><tr><th>' . esc_html__( 'First name', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Email', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Phone', 'affiliate-wpm' ) . '</th></tr></thead><tbody>';
+		echo '<section class="awpm-card awpm-history" id="awpm-customers"><h3>' . wp_kses( AWPM_UI::icon( 'affiliates' ), AWPM_UI::allowed_html() ) . esc_html__( 'Your registered customers', 'affiliate-wpm' ) . '</h3><p class="awpm-muted">' . esc_html__( 'Only first names and masked contact details are shown.', 'affiliate-wpm' ) . '</p><div class="awpm-table-scroll"><table><thead><tr><th>' . esc_html__( 'First name', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Email', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Phone', 'affiliate-wpm' ) . '</th></tr></thead><tbody>';
 		foreach ( $ids as $customer_id ) {
 			$name = get_user_meta( $customer_id, 'first_name', true ) ?: get_user_meta( $customer_id, 'billing_first_name', true );
 			$user = get_userdata( $customer_id );
@@ -237,7 +242,7 @@ final class AWPM_Account {
 			echo '<tr><td>' . esc_html( $name ?: __( 'Customer', 'affiliate-wpm' ) ) . '</td><td>' . esc_html( $email ?: '—' ) . '</td><td>' . esc_html( $phone ?: '—' ) . '</td></tr>';
 		}
 		if ( ! $ids ) { echo '<tr><td colspan="3" class="awpm-empty">' . esc_html__( 'No registered customers yet.', 'affiliate-wpm' ) . '</td></tr>'; }
-		echo '</tbody></table></div>'; self::pagination( 'awpm_rp', $page, $count, 'awpm-customers' ); echo '</section>';
+		echo '</tbody></table></div>'; self::pagination( 'awpm_rp', esc_html( $page ), $count, 'awpm-customers' ); echo '</section>';
 	}
 	private static function commission_items( $row, $id ) {
 		$order = wc_get_order( $row->order_id );
@@ -264,11 +269,13 @@ final class AWPM_Account {
 			elseif ( 'fixed' === $type ) { $label = wp_kses_post( AWPM_Store::money( $value, $row->currency ) ) . ' ' . esc_html__( 'fixed / unit', 'affiliate-wpm' ); }
 			elseif ( 'disabled' === $type ) { $label = esc_html__( 'Excluded', 'affiliate-wpm' ); }
 			else { $label = esc_html__( 'Rate unavailable', 'affiliate-wpm' ); }
+		/* translators: %s: item quantity. */
 			$html .= '<li><strong>' . esc_html( $title ) . '</strong><small>' . $label . ' · ' . sprintf( esc_html__( 'Qty: %s', 'affiliate-wpm' ), esc_html( wc_format_localized_decimal( $quantity ) ) ) . '</small></li>';
 		}
 		$html .= '</ul>';
 		$fx = $order->get_meta( '_awpm_fx' );
 		if ( is_array( $fx ) && ( $fx['from'] ?? '' ) !== ( $fx['to'] ?? '' ) && AWPM_Currency::valid_rate( $fx['rate'] ?? null ) ) {
+		/* translators: %1$s: source currency, %2$s: exchange rate, %3$s: target currency. */
 			$html .= '<small class="awpm-note">' . esc_html( sprintf( __( 'Saved rate: 1 %1$s = %2$s %3$s', 'affiliate-wpm' ), $fx['from'], rtrim( rtrim( sprintf( '%.12f', $fx['rate'] ), '0' ), '.' ), $fx['to'] ) ) . '</small>';
 		}
 		return $html;
@@ -280,12 +287,12 @@ final class AWPM_Account {
 		$count = (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM $table WHERE affiliate_id=%d", $id ) );
 		$page = min( AWPM_Security::page( $_GET, $key ), max( 1, (int) ceil( $count / 10 ) ) );
 		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $table WHERE affiliate_id=%d ORDER BY id DESC LIMIT 10 OFFSET %d", $id, ( $page - 1 ) * 10 ) );
-		echo '<section class="awpm-card awpm-history" id="awpm-' . esc_attr( $type ) . '"><h3>' . AWPM_UI::icon( $type ) . esc_html( $commission ? __( 'Commission history', 'affiliate-wpm' ) : __( 'Withdrawal history', 'affiliate-wpm' ) ) . '</h3><div class="awpm-table-scroll"><table><thead><tr><th>' . esc_html__( 'Reference', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Date', 'affiliate-wpm' ) . '</th>';
+		echo '<section class="awpm-card awpm-history" id="awpm-' . esc_attr( $type ) . '"><h3>' . wp_kses( AWPM_UI::icon( $type ), AWPM_UI::allowed_html() ) . esc_html( $commission ? __( 'Commission history', 'affiliate-wpm' ) : __( 'Withdrawal history', 'affiliate-wpm' ) ) . '</h3><div class="awpm-table-scroll"><table><thead><tr><th>' . esc_html__( 'Reference', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Date', 'affiliate-wpm' ) . '</th>';
 		if ( $commission ) { echo '<th>' . esc_html__( 'Items / commission rate', 'affiliate-wpm' ) . '</th>'; }
 		echo '<th>' . esc_html__( 'Amount', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Status', 'affiliate-wpm' ) . '</th><th>' . esc_html( $commission ? __( 'Adjustment', 'affiliate-wpm' ) : __( 'Method / note', 'affiliate-wpm' ) ) . '</th></tr></thead><tbody>';
 		foreach ( $rows as $row ) {
 			echo '<tr><td>#' . esc_html( $commission ? $row->order_id : $row->id ) . '</td><td>' . esc_html( get_date_from_gmt( $row->created_at, get_option( 'date_format' ) ) ) . '</td>';
-			if ( $commission ) { echo '<td>' . self::commission_items( $row, $id ) . '</td>'; }
+			if ( $commission ) { echo '<td>' . wp_kses_post( self::commission_items( $row, $id ) ) . '</td>'; }
 			echo '<td>' . wp_kses_post( AWPM_Store::money( $row->amount, $row->currency ) ) . '</td><td>' . wp_kses_post( AWPM_Store::status( $row->status ) ) . '</td><td>';
 			if ( $commission ) {
 				if ( 'repeat' === $row->eligibility ) { echo esc_html__( 'Repeat purchase excluded', 'affiliate-wpm' ); }
@@ -294,7 +301,7 @@ final class AWPM_Account {
 			echo '</td></tr>';
 		}
 		if ( ! $rows ) { echo '<tr><td colspan="' . ( $commission ? '6' : '5' ) . '" class="awpm-empty">' . esc_html__( 'Nothing here yet. Your activity will appear here.', 'affiliate-wpm' ) . '</td></tr>'; }
-		echo '</tbody></table></div>'; self::pagination( $key, $page, $count, 'awpm-' . $type ); echo '</section>';
+		echo '</tbody></table></div>'; self::pagination( $key, esc_html( $page ), $count, 'awpm-' . $type ); echo '</section>';
 	}
 	public static function privacy() {
 		if ( function_exists( 'wp_add_privacy_policy_content' ) ) {

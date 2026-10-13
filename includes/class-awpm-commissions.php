@@ -197,7 +197,7 @@ final class AWPM_Commissions {
 		if ( true === $result ) {
 			$order = wc_get_order( $id );
 			$due = (int) $order->get_meta( '_awpm_available_at' );
-			if ( $due > time() && $order->has_status( 'completed' ) && 'pending' === $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM ' . AWPM_Store::table( 'commissions' ) . ' WHERE order_id=%d', $id ) ) ) { self::schedule_release( $id, $due ); }
+			if ( $due > time() && $order->has_status( 'completed' ) && 'pending' === $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM %i WHERE order_id=%d', AWPM_Store::table( 'commissions' ), $id ) ) ) { self::schedule_release( $id, $due ); }
 		}
 		return $result;
 	}

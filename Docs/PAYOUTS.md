@@ -1,3 +1,5 @@
+Automatic PayPal/Stripe payout features described here require the separate Affiliate WPM Pro add-on and an active license. Free supports one manual payout method without activation.
+
 # PayPal and Stripe affiliate payouts
 
 Configure providers in WooCommerce > Affiliate WPM > Settings > Payout settings > Automatic payouts. Only administrators can configure credentials. Manual bank/mobile-wallet methods remain available, including Bangladesh methods.

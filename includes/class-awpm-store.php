@@ -82,7 +82,7 @@ final class AWPM_Store {
 			}
 			self::must( $wpdb->query( 'START TRANSACTION' ) );
 			$result = call_user_func( $callback );
-			self::must( $wpdb->query( is_wp_error( $result ) ? 'ROLLBACK' : 'COMMIT' ) );
+			if ( is_wp_error( $result ) ) { self::must( $wpdb->query( 'ROLLBACK' ) ); } else { self::must( $wpdb->query( 'COMMIT' ) ); }
 			$committed = ! is_wp_error( $result );
 			return $result;
 		} catch ( Throwable $error ) {

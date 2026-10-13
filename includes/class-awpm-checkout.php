@@ -9,7 +9,7 @@ final class AWPM_Checkout {
 		add_action( 'shutdown', array( __CLASS__, 'finish' ), 5 );
 	}
 	private static function quick_request() {
-		return wp_doing_ajax() && 'POST' === ( $_SERVER['REQUEST_METHOD'] ?? '' ) && 'quick_order_submit' === AWPM_Security::value( $_POST, 'action' ) && function_exists( 'handle_quick_order_submit_cs' ) && wp_verify_nonce( AWPM_Security::value( $_POST, 'security' ), 'quick_order_nonce' );
+		return wp_doing_ajax() && 'POST' === sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) ) && 'quick_order_submit' === AWPM_Security::value( $_POST, 'action' ) && function_exists( 'handle_quick_order_submit_cs' ) && wp_verify_nonce( sanitize_text_field( wp_unslash( AWPM_Security::value( $_POST, 'security' ) ) ), 'quick_order_nonce' );
 	}
 	public static function collect( $order ) {
 		if ( ! self::quick_request() || ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || ! $order->get_id() || ! $order->get_items( 'line_item' ) ) { return; }

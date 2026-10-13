@@ -32,18 +32,26 @@ final class AWPM_Settings {
 		return '';
 	}
 	public static function defaults() {
-		return array( 'enabled' => 'yes', 'approval_required' => 'no', 'terms_content' => '', 'join_title' => __( 'Turn recommendations into rewards', 'affiliate-wpm' ), 'join_description' => __( 'Join our affiliate program and earn commissions when someone buys through your personal link.', 'affiliate-wpm' ), 'join_button_text' => __( 'Join affiliate program', 'affiliate-wpm' ), 'join_show_rate' => 'no', 'join_url_enabled' => 'no', 'join_promotion_enabled' => 'no', 'release_mode' => 'completed', 'release_days' => 7, 'commission_type' => 'percent', 'commission_rate' => '10', 'minimum' => '50', 'currency' => self::base_currency(), 'exchange_source' => 'auto', 'exchange_rates' => '', 'referral_parameter' => 'awpm_ref', 'account_slug' => 'affiliate-wpm', 'cookie_days' => 30, 'attribution' => 'first', 'purchase_policy' => 'multiple', 'payout_mode' => 'manual', 'method_selection' => 'multiple', 'methods' => array( array( 'id' => 'bank', 'name' => 'Bank transfer', 'instructions' => 'Enter the account holder, bank name and account details. Do not provide passwords or card details.', 'active' => 'yes' ) ) );
+		return array( 'enabled' => 'yes', 'approval_required' => 'no', 'terms_content' => '', 'join_title' => __( 'Turn recommendations into rewards', 'affiliate-wpm' ), 'join_description' => __( 'Join our affiliate program and earn commissions when someone buys through your personal link.', 'affiliate-wpm' ), 'join_button_text' => __( 'Join affiliate program', 'affiliate-wpm' ), 'join_show_rate' => 'no', 'join_url_enabled' => 'no', 'join_promotion_enabled' => 'no', 'release_mode' => 'completed', 'release_days' => 7, 'commission_type' => 'percent', 'commission_rate' => '10', 'minimum' => '50', 'currency' => self::base_currency(), 'exchange_source' => 'same', 'exchange_rates' => '', 'referral_parameter' => 'awpm_ref', 'account_slug' => 'affiliate-wpm', 'cookie_days' => 30, 'attribution' => 'first', 'purchase_policy' => 'multiple', 'payout_mode' => 'manual', 'method_selection' => 'multiple', 'methods' => array( array( 'id' => 'bank', 'name' => 'Bank transfer', 'instructions' => 'Enter the account holder, bank name and account details. Do not provide passwords or card details.', 'active' => 'yes' ) ) );
 	}
 	/** Effective program state; keep the merchant's saved preference intact. */
 	public static function program_enabled() {
-		return AWPM_License::active() && 'yes' === self::get( 'enabled' );
+		return 'yes' === self::get( 'enabled' );
 	}
-	public static function get( $key = null ) {
+	public static function stored() {
 		$settings = wp_parse_args( get_option( 'awpm_settings', array() ), self::defaults() );
 		// Ignore the former plugin currency override, including older settings backups.
 		$settings['currency'] = self::base_currency();
 		$settings['referral_parameter'] = self::referral_parameter();
 		$settings['account_slug'] = self::account_slug();
+		return $settings;
+	}
+	public static function method_limit() { return max( 1, min( 20, (int) apply_filters( 'awpm_manual_method_limit', 1 ) ) ); }
+	public static function get( $key = null ) {
+		$settings = self::stored();
+		$settings['methods'] = array_slice( (array) $settings['methods'], 0, self::method_limit() );
+		$settings['exchange_source'] = 'same'; $settings['exchange_rates'] = '';
+		$settings = apply_filters( 'awpm_effective_settings', $settings );
 		return null === $key ? $settings : ( $settings[ $key ] ?? null );
 	}
 	/** Canonical content and version shared by display and enrollment validation. */
@@ -100,7 +108,7 @@ final class AWPM_Settings {
 		$clean['cookie_days'] = max( 1, min( 365, absint( AWPM_Security::value( $input, 'cookie_days', '30' ) ) ) );
 		$clean['methods'] = array();
 		$ids = array();
-		foreach ( array_slice( (array) ( $input['methods'] ?? array() ), 0, 20 ) as $row ) {
+		foreach ( array_slice( (array) ( $input['methods'] ?? array() ), 0, self::method_limit() ) as $row ) {
 			if ( ! is_array( $row ) ) { continue; }
 			$name = substr( sanitize_text_field( AWPM_Security::value( $row, 'name' ) ), 0, 120 );
 			if ( '' === $name ) { continue; }
@@ -116,19 +124,22 @@ final class AWPM_Settings {
 			}
 			unset( $method );
 		}
-		return $clean;
-	}
-	public static function require_license() {
-		if ( ! AWPM_License::active() ) {
-			wp_die( esc_html__( 'Activate your Affiliate WPM license to change plugin settings.', 'affiliate-wpm' ), '', array( 'response' => 403 ) );
+		// Preserve add-on configuration on downgrade; it is not available in Free.
+		if ( self::method_limit() === 1 ) {
+			$stored = self::stored();
+			foreach ( array_slice( (array) $stored['methods'], 1 ) as $archived ) {
+				if ( ! in_array( $archived['id'], array_column( $clean['methods'], 'id' ), true ) ) { $clean['methods'][] = $archived; }
+			}
+			$clean['exchange_source'] = $stored['exchange_source']; $clean['exchange_rates'] = $stored['exchange_rates'];
 		}
+		return $clean;
 	}
 	public static function save() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affiliate-wpm' ), 403 ); }
 		AWPM_Security::admin_request( 'awpm_settings' );
-		self::require_license();
 		$input = isset( $_POST['awpm'] ) && is_array( $_POST['awpm'] ) ? wp_unslash( $_POST['awpm'] ) : array();
 		if ( isset( $_POST['awpm_gateway'] ) ) {
+			if ( ! AWPM_License::active() ) { wp_die( esc_html__( 'Automatic payout settings belong to the separate Pro add-on.', 'affiliate-wpm' ), '', array( 'response' => 403 ) ); }
 			if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Only administrators can configure automatic payout credentials.', 'affiliate-wpm' ), '', array( 'response' => 403 ) ); }
 			$gateways = AWPM_Gateways::clean( wp_unslash( $_POST['awpm_gateway'] ) );
 			if ( is_wp_error( $gateways ) ) { wp_safe_redirect( add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => 'settings', 'awpm_error' => 1, 'awpm_message' => $gateways->get_error_message() ), admin_url( 'admin.php' ) ) ); exit; }

@@ -112,10 +112,11 @@ final class AWPM_Sharing {
 			$names = self::platforms(); if ( ! isset( $names[ $key ] ) ) { continue; }
 			$name = $names[ $key ]; $url = self::share_url( $key, $link );
 			if ( ! $url && 'copy' !== $key ) { continue; }
+		/* translators: %s: sharing platform name. */
 			$label = 'copy' === $key ? $name : sprintf( __( 'Share on %s', 'affiliate-wpm' ), $name );
 			$attributes = ' class="awpm-share-icon awpm-share-' . esc_attr( $key ) . ' awpm-primary" aria-label="' . esc_attr( $label ) . '" title="' . esc_attr( $label ) . '"';
-			echo $url ? '<a' . $attributes . ' href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">' : '<button type="button"' . $attributes . ' data-awpm-share="copy" data-awpm-link="' . esc_attr( $link ) . '">';
-			echo self::icon( $key );
+			echo wp_kses( $url ? '<a' . $attributes . ' href="' . esc_url( $url ) . '" target="_blank" rel="noopener noreferrer">' : '<button type="button"' . $attributes . ' data-awpm-share="copy" data-awpm-link="' . esc_attr( $link ) . '">', AWPM_UI::allowed_html() );
+			echo wp_kses( self::icon( $key ), AWPM_UI::allowed_html() );
 			echo $url ? '</a>' : '</button>';
 		}
 		echo '</div><span class="awpm-share-status" role="status" aria-live="polite"></span></section>';
@@ -147,7 +148,7 @@ final class AWPM_Sharing {
 		}
 		echo '</div></section><section class="awpm-card"><h2>' . esc_html__( 'Active sharing channels', 'affiliate-wpm' ) . '</h2><p class="awpm-muted">' . esc_html__( 'Select the icons to display. No third-party scripts are loaded. Sharing opens the selected platform only when an affiliate clicks its icon.', 'affiliate-wpm' ) . '</p><div class="awpm-channel-grid">';
 		foreach ( self::platforms() as $key => $label ) {
-			echo '<label class="awpm-channel"><input type="checkbox" name="awpm_sharing[platforms][]" value="' . esc_attr( $key ) . '"' . checked( in_array( $key, (array) self::get( 'platforms' ), true ), true, false ) . '>' . self::icon( $key ) . '<span>' . esc_html( $label ) . '</span></label>';
+			echo '<label class="awpm-channel"><input type="checkbox" name="awpm_sharing[platforms][]" value="' . esc_attr( $key ) . '"' . checked( in_array( $key, (array) self::get( 'platforms' ), true ), true, false ) . '>' . wp_kses( self::icon( $key ), AWPM_UI::allowed_html() ) . '<span>' . esc_html( $label ) . '</span></label>';
 		}
 		echo '</div><p class="awpm-muted">' . esc_html__( 'Only channels with direct link sharing are shown, plus the optional copy icon. The account link generator stays available independently of the product sharing section.', 'affiliate-wpm' ) . '</p></section>';
 		AWPM_UI::footer( __( 'Save sharing settings', 'affiliate-wpm' ) ); echo '</form>';

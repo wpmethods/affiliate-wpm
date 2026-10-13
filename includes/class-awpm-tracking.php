@@ -40,7 +40,7 @@ final class AWPM_Tracking {
 	}
 	public static function capture() {
 		$key = AWPM_Settings::referral_request_key();
-		if ( ! AWPM_Settings::program_enabled() || ! $key || ! is_scalar( $_GET[ $key ] ) || is_admin() || headers_sent() ) { return; }
+		if ( ! AWPM_Settings::program_enabled() || ! $key || ! isset( $_GET[ $key ] ) || ! is_scalar( $_GET[ $key ] ) || is_admin() || headers_sent() ) { return; }
 		$token = sanitize_text_field( wp_unslash( $_GET[ $key ] ) );
 		if ( ! preg_match( '/^[a-z0-9]{32}$/', $token ) ) { return; }
 		$users = get_users( array( 'meta_key' => '_awpm_token', 'meta_value' => $token, 'number' => 1, 'fields' => 'ID' ) );
