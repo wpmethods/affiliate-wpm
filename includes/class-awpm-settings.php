@@ -65,6 +65,7 @@ final class AWPM_Settings {
 			return array();
 		}
 		$methods = array_values( array_filter( self::get( 'methods' ), function ( $method ) { return 'yes' === $method['active']; } ) );
+		$methods = array_merge( $methods, AWPM_Gateways::methods() );
 		return 'single' === self::get( 'method_selection' ) ? array_slice( $methods, 0, 1 ) : $methods;
 	}
 	public static function clean( $input ) {
@@ -104,7 +105,7 @@ final class AWPM_Settings {
 			$name = substr( sanitize_text_field( AWPM_Security::value( $row, 'name' ) ), 0, 120 );
 			if ( '' === $name ) { continue; }
 			$id = sanitize_key( AWPM_Security::value( $row, 'id' ) );
-			if ( ! $id || isset( $ids[ $id ] ) ) { $id = wp_generate_uuid4(); }
+			if ( ! $id || in_array( $id, array( 'awpm_paypal', 'awpm_stripe' ), true ) || isset( $ids[ $id ] ) ) { $id = wp_generate_uuid4(); }
 			$ids[ $id ] = true;
 			$clean['methods'][] = array( 'id' => $id, 'name' => $name, 'instructions' => substr( sanitize_textarea_field( AWPM_Security::value( $row, 'instructions' ) ), 0, 2000 ), 'active' => 'yes' === AWPM_Security::value( $row, 'active' ) ? 'yes' : 'no' );
 		}
@@ -127,7 +128,18 @@ final class AWPM_Settings {
 		AWPM_Security::admin_request( 'awpm_settings' );
 		self::require_license();
 		$input = isset( $_POST['awpm'] ) && is_array( $_POST['awpm'] ) ? wp_unslash( $_POST['awpm'] ) : array();
+		if ( isset( $_POST['awpm_gateway'] ) ) {
+			if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Only administrators can configure automatic payout credentials.', 'affiliate-wpm' ), '', array( 'response' => 403 ) ); }
+			$gateways = AWPM_Gateways::clean( wp_unslash( $_POST['awpm_gateway'] ) );
+			if ( is_wp_error( $gateways ) ) { wp_safe_redirect( add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => 'settings', 'awpm_error' => 1, 'awpm_message' => $gateways->get_error_message() ), admin_url( 'admin.php' ) ) ); exit; }
+			update_option( AWPM_Gateways::OPTION, $gateways, false );
+		}
 		update_option( 'awpm_settings', self::clean( $input ), false );
+		if ( isset( $gateways ) ) {
+			$result = AWPM_Gateways::verify_paypal();
+			if ( ! is_wp_error( $result ) ) { $result = AWPM_Stripe::setup( wp_unslash( $_POST['awpm_gateway'] ) ); }
+			if ( is_wp_error( $result ) ) { wp_safe_redirect( add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => 'settings', 'saved' => 1, 'awpm_error' => 1, 'awpm_message' => $result->get_error_message() ), admin_url( 'admin.php' ) ) ); exit; }
+		}
 		wp_safe_redirect( admin_url( 'admin.php?page=affiliate-wpm&tab=settings&saved=1' ) );
 		exit;
 	}

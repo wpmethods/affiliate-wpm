@@ -120,7 +120,7 @@ final class AWPM_Store {
 	}
 
 	public static function status( $status ) {
-		$labels = array( 'pending' => __( 'Pending', 'affiliate-wpm' ), 'available' => __( 'Available', 'affiliate-wpm' ), 'reserved' => __( 'In withdrawal', 'affiliate-wpm' ), 'paid' => __( 'Paid', 'affiliate-wpm' ), 'approved' => __( 'Approved', 'affiliate-wpm' ), 'completed' => __( 'Completed', 'affiliate-wpm' ), 'rejected' => __( 'Rejected', 'affiliate-wpm' ), 'paused' => __( 'Paused', 'affiliate-wpm' ) );
+		$labels = array( 'processing' => __( 'Processing', 'affiliate-wpm' ), 'tested' => __( 'Sandbox successful', 'affiliate-wpm' ), 'failed' => __( 'Failed', 'affiliate-wpm' ), 'pending' => __( 'Pending', 'affiliate-wpm' ), 'available' => __( 'Available', 'affiliate-wpm' ), 'reserved' => __( 'In withdrawal', 'affiliate-wpm' ), 'paid' => __( 'Paid', 'affiliate-wpm' ), 'approved' => __( 'Approved', 'affiliate-wpm' ), 'completed' => __( 'Completed', 'affiliate-wpm' ), 'rejected' => __( 'Rejected', 'affiliate-wpm' ), 'paused' => __( 'Paused', 'affiliate-wpm' ) );
 		return '<span class="awpm-badge awpm-' . esc_attr( $status ) . '">' . esc_html( $labels[ $status ] ?? $status ) . '</span>';
 	}
 }

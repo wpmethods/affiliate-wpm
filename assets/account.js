@@ -1,9 +1,19 @@
 ﻿(function () {
     'use strict';
     const method = document.getElementById('awpm-method');
-    if (method) method.addEventListener('change', function () {
-        document.getElementById('awpm-instructions').textContent = method.selectedOptions[0].dataset.instructions || '';
-    });
+    if (method) {
+        function payoutMethod() {
+            const option = method.selectedOptions[0];
+            document.getElementById('awpm-instructions').textContent = option.dataset.instructions || '';
+            const details = document.getElementById('awpm-details');
+            const label = document.querySelector('label[for="awpm-details"]');
+            const stripe = option.dataset.provider === 'stripe';
+            if (details) { details.disabled = stripe; details.required = !stripe; details.hidden = stripe; }
+            if (label) { label.hidden = stripe; label.textContent = option.dataset.provider === 'paypal' ? 'PayPal email' : 'Payment destination details'; }
+            if (details) { details.rows = option.dataset.provider === 'paypal' ? 1 : 3; details.placeholder = option.dataset.provider === 'paypal' ? 'Your PayPal account email' : ''; }
+        }
+        method.addEventListener('change', payoutMethod); payoutMethod();
+    }
     document.querySelectorAll('[data-awpm-copy]').forEach(function (copy) {
         const originalLabel = copy.textContent;
         let copyTimer;

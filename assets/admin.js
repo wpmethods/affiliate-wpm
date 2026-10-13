@@ -163,6 +163,31 @@
     }
     if (exchange) exchange.addEventListener('change', conditionalFields);
     if (release) release.addEventListener('change', conditionalFields);
+    document.querySelectorAll('[data-awpm-provider]').forEach(function (card) {
+        const provider = card.dataset.awpmProvider;
+        const environment = card.querySelector('select[name="awpm_gateway[' + provider + '_mode]"]');
+        const marker = card.querySelector('[data-awpm-credential-mode]');
+        const title = card.querySelector('[data-awpm-credential-title]');
+        const fields = Array.from(card.querySelectorAll('[data-awpm-credential]'));
+        if (!environment || !marker) return;
+        let current = marker.value;
+        const drafts = {};
+        function refresh() {
+            fields.forEach(function (field) {
+                const saved = current === 'live' ? field.dataset.savedLive : field.dataset.savedTest;
+                field.placeholder = saved === 'yes' ? field.dataset.savedPlaceholder : field.dataset.emptyPlaceholder;
+            });
+            if (title) title.textContent = current === 'live' ? 'Live credentials' : 'Sandbox / Test credentials';
+        }
+        environment.addEventListener('change', function () {
+            drafts[current] = fields.map(function (field) { return field.value; });
+            current = environment.value;
+            fields.forEach(function (field, index) { field.value = drafts[current] ? drafts[current][index] : ''; });
+            marker.value = current;
+            refresh();
+        });
+        refresh();
+    });
     conditionalFields();
     sync();
 })();

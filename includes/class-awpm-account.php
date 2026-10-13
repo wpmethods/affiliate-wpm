@@ -35,7 +35,7 @@ final class AWPM_Account {
 				wp_enqueue_style( 'awpm-account', AWPM_URL . 'assets/affiliate-wpm.css', array(), (string) filemtime( AWPM_PATH . 'assets/affiliate-wpm.css' ) );
 				wp_enqueue_style( 'awpm-panel', AWPM_URL . 'assets/panel.css', array( 'awpm-account' ), (string) filemtime( AWPM_PATH . 'assets/panel.css' ) );
 				AWPM_Design::enqueue( 'awpm-panel' );
-				wp_enqueue_script( 'awpm-account', AWPM_URL . 'assets/account.js', array(), AWPM_VERSION, true );
+				wp_enqueue_script( 'awpm-account', AWPM_URL . 'assets/account.js', array(), (string) filemtime( AWPM_PATH . 'assets/account.js' ), true );
 			}
 		} );
 		add_action( 'admin_init', array( __CLASS__, 'privacy' ) );
@@ -67,6 +67,8 @@ final class AWPM_Account {
 				$result = AWPM_Affiliates::join( $id, 'yes' === AWPM_Security::value( $_POST, 'awpm_accept_terms' ), wp_unslash( AWPM_Security::value( $_POST, 'awpm_terms_version' ) ), wp_unslash( AWPM_Security::rows( $_POST, 'awpm_join' ) ) );
 				$messages = array( 'approved' => __( 'Your affiliate account is ready. Start sharing your referral link!', 'affiliate-wpm' ), 'pending' => __( 'Your affiliate application is awaiting administrator approval.', 'affiliate-wpm' ), 'rejected' => __( 'Your affiliate application was rejected. Please contact the store.', 'affiliate-wpm' ) );
 				wc_add_notice( is_wp_error( $result ) ? $result->get_error_message() : ( $messages[ $result ] ?? '' ), is_wp_error( $result ) || 'rejected' === $result ? 'error' : 'success' );
+			} elseif ( 'stripe_connect' === $action ) {
+				$result = AWPM_Gateways::connect( sanitize_text_field( wp_unslash( AWPM_Security::value( $_POST, 'stripe_country' ) ) ) ); if ( is_wp_error( $result ) ) { wc_add_notice( $result->get_error_message(), 'error' ); }
 			} elseif ( 'withdraw' === $action ) {
 				$method = isset( $_POST['method'] ) && is_scalar( $_POST['method'] ) ? sanitize_key( wp_unslash( $_POST['method'] ) ) : '';
 				$details = isset( $_POST['details'] ) && is_scalar( $_POST['details'] ) ? wp_unslash( $_POST['details'] ) : '';
@@ -115,8 +117,8 @@ final class AWPM_Account {
 		if ( ! $active ) { echo '<p class="awpm-notice">' . esc_html__( 'The affiliate program or your account is paused. Your history is still available.', 'affiliate-wpm' ) . '</p>'; }
 		$commissions = AWPM_Store::table( 'commissions' ); $payouts = AWPM_Store::table( 'payouts' );
 		$pending = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $commissions WHERE affiliate_id=%d AND currency=%s AND status='pending'", $id, $currency ) );
-		$reserved = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $payouts WHERE affiliate_id=%d AND currency=%s AND status IN ('pending','approved')", $id, $currency ) );
-		$paid = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $payouts WHERE affiliate_id=%d AND currency=%s AND status='completed'", $id, $currency ) );
+		$reserved = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $payouts WHERE affiliate_id=%d AND currency=%s AND status IN ('pending','approved','processing')", $id, $currency ) );
+		$paid = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(paid_amount),0) FROM $commissions WHERE affiliate_id=%d AND currency=%s", $id, $currency ) );
 		$balance = AWPM_Store::balance( $id, $currency );
 		echo '<div class="awpm-metrics" id="awpm-earnings">';
 		echo AWPM_UI::metric( __( 'Available balance', 'affiliate-wpm' ), AWPM_Store::money( $balance, $currency ), 'wallet', __( 'Ready for withdrawal', 'affiliate-wpm' ) );
@@ -136,11 +138,12 @@ final class AWPM_Account {
 		echo '<div class="awpm-withdraw-balance"><span>' . esc_html__( 'Available to withdraw', 'affiliate-wpm' ) . '</span><strong>' . wp_kses_post( AWPM_Store::money( $balance, $currency ) ) . '</strong><p class="awpm-muted">' . esc_html__( 'Minimum withdrawal:', 'affiliate-wpm' ) . ' ' . wp_kses_post( AWPM_Store::money( $minimum, $currency ) ) . '</p>';
 		if ( $balance < $minimum ) { echo '<progress max="' . esc_attr( $minimum ) . '" value="' . esc_attr( max( 0, $balance ) ) . '" aria-label="' . esc_attr__( 'Progress toward minimum withdrawal', 'affiliate-wpm' ) . '"></progress><p class="awpm-muted">' . sprintf( esc_html__( '%s more to reach your minimum.', 'affiliate-wpm' ), wp_kses_post( AWPM_Store::money( $minimum - $balance, $currency ) ) ) . '</p>'; }
 		echo '</div>';
-		$methods = AWPM_Settings::methods(); $open = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $payouts WHERE affiliate_id=%d AND status IN ('pending','approved') LIMIT 1", $id ) );
+		AWPM_Gateways::connection_ui( $id );
+		$methods = AWPM_Settings::methods(); $open = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $payouts WHERE affiliate_id=%d AND status IN ('pending','approved','processing') LIMIT 1", $id ) );
 		if ( $active && $methods && ! $open ) {
 			echo '<form method="post" class="awpm-withdraw">'; wp_nonce_field( 'awpm_account' );
 			echo '<input type="hidden" name="awpm_action" value="withdraw"><label for="awpm-method">' . esc_html__( 'Payout method', 'affiliate-wpm' ) . '</label><select id="awpm-method" name="method">';
-			foreach ( $methods as $method ) { echo '<option value="' . esc_attr( $method['id'] ) . '" data-instructions="' . esc_attr( $method['instructions'] ) . '">' . esc_html( $method['name'] ) . '</option>'; }
+			foreach ( $methods as $method ) { echo '<option value="' . esc_attr( $method['id'] ) . '" data-provider="' . esc_attr( $method['provider'] ?? 'manual' ) . '" data-instructions="' . esc_attr( $method['instructions'] ) . '">' . esc_html( $method['name'] ) . '</option>'; }
 			echo '</select><p id="awpm-instructions" class="awpm-muted">' . esc_html( $methods[0]['instructions'] ) . '</p><label for="awpm-details">' . esc_html__( 'Payment destination details', 'affiliate-wpm' ) . '</label><textarea id="awpm-details" name="details" rows="3" required minlength="3" maxlength="2000"></textarea><p class="awpm-muted">' . esc_html__( 'Enter only the details needed to receive payment. Never share passwords or card security codes.', 'affiliate-wpm' ) . '</p><button class="button awpm-primary"' . disabled( $balance < $minimum, true, false ) . '>' . esc_html__( 'Withdraw available balance', 'affiliate-wpm' ) . AWPM_UI::icon( 'arrow' ) . '</button></form>';
 		} else { echo '<p class="awpm-notice">' . esc_html( $open ? __( 'Your withdrawal is being reviewed. Follow its status in the history below.', 'affiliate-wpm' ) : __( 'Withdrawals are currently unavailable.', 'affiliate-wpm' ) ) . '</p>'; }
 		echo '</section></div><p class="awpm-muted awpm-balance-note">' . esc_html__( 'Refunds adjust your earnings. Refunds after a payout reduce future earnings. History keeps each transaction in its original currency.', 'affiliate-wpm' ) . '</p>';
@@ -287,7 +290,7 @@ final class AWPM_Account {
 			if ( $commission ) {
 				if ( 'repeat' === $row->eligibility ) { echo esc_html__( 'Repeat purchase excluded', 'affiliate-wpm' ); }
 				else { echo (float) $row->paid_amount > (float) $row->amount ? wp_kses_post( AWPM_Store::money( (float) $row->amount - (float) $row->paid_amount, $row->currency ) ) : '&mdash;'; }
-			} else { echo esc_html( $row->method ); if ( $row->note ) { echo '<small class="awpm-note">' . esc_html( $row->note ) . '</small>'; } }
+			} else { echo esc_html( $row->method ); AWPM_Gateways::summary( $row->id ); if ( $row->note ) { echo '<small class="awpm-note">' . esc_html( $row->note ) . '</small>'; } }
 			echo '</td></tr>';
 		}
 		if ( ! $rows ) { echo '<tr><td colspan="' . ( $commission ? '6' : '5' ) . '" class="awpm-empty">' . esc_html__( 'Nothing here yet. Your activity will appear here.', 'affiliate-wpm' ) . '</td></tr>'; }
@@ -296,7 +299,7 @@ final class AWPM_Account {
 	public static function privacy() {
 		if ( function_exists( 'wp_add_privacy_policy_content' ) ) {
 			wp_add_privacy_policy_content( 'Affiliate WPM', '<p>' . esc_html__( 'We count referral clicks in daily aggregate counters, without visitor IP addresses or browser fingerprints. A second signed cookie suppresses repeated consecutive clicks for 30 minutes. New customer account registrations may be linked to the referring affiliate while a valid referral cookie is present. Affiliates see the customer first name and masked email and phone details; full contact details, surnames and other account details are not shown. Registration attribution and affiliate counters are removed through WordPress personal-data erasure or when the associated account is deleted.', 'affiliate-wpm' ) . '</p>' );
-			wp_add_privacy_policy_content( 'Affiliate WPM', '<p>' . esc_html__( 'Our affiliate program uses a signed referral cookie to attribute purchases. The cookie stores an affiliate identifier and expiry time. Affiliate applications may include a website/profile URL and promotion plan when these fields are enabled for administrator review. We store affiliate enrollment, order-linked commissions, and withdrawal requests with payment destination details in our WordPress database. Authorized store managers can access these records to process payouts. Referral cookies expire after the configured duration. Financial records are retained until the store administrator removes them according to the store retention policy. We do not send this information to an external payout provider automatically.', 'affiliate-wpm' ) . '</p>' );
+			wp_add_privacy_policy_content( 'Affiliate WPM', '<p>' . esc_html__( 'Our affiliate program uses a signed referral cookie to attribute purchases. The cookie stores an affiliate identifier and expiry time. Affiliate applications may include a website/profile URL and promotion plan when these fields are enabled for administrator review. We store affiliate enrollment, order-linked commissions, and withdrawal requests with payment destination details in our WordPress database. Authorized store managers can access these records to process payouts. Referral cookies expire after the configured duration. Financial records are retained until the store administrator removes them according to the store retention policy. If automatic payouts are configured, payment recipient identifiers, payout amounts and currencies are sent to PayPal or Stripe when a store manager sends an approved withdrawal. Connected Stripe account identifiers are stored for this purpose. Provider transaction records are retained for financial reconciliation.', 'affiliate-wpm' ) . '</p>' );
 		}
 	}
 	public static function exporter( $exporters ) {
@@ -312,6 +315,12 @@ final class AWPM_Account {
 		$page = max( 1, absint( $page ) );
 		if ( 1 === $page && get_user_meta( $user->ID, '_awpm_enrolled', true ) ) {
 			$data[] = array( 'group_id' => 'affiliate-wpm', 'group_label' => 'Affiliate WPM', 'item_id' => 'awpm-profile-' . $user->ID, 'data' => array( array( 'name' => __( 'Enrollment', 'affiliate-wpm' ), 'value' => get_user_meta( $user->ID, '_awpm_enrolled', true ) ), array( 'name' => __( 'Referral token', 'affiliate-wpm' ), 'value' => get_user_meta( $user->ID, '_awpm_token', true ) ), array( 'name' => __( 'Blocked', 'affiliate-wpm' ), 'value' => get_user_meta( $user->ID, '_awpm_blocked', true ) ) ) );
+		}
+		if ( 1 === $page ) {
+			foreach ( array( 'test', 'live' ) as $mode ) {
+				$connection = get_user_meta( $user->ID, '_awpm_stripe_' . $mode, true );
+				if ( is_array( $connection ) && ! empty( $connection['id'] ) ) { $data[] = array( 'group_id' => 'affiliate-wpm', 'group_label' => 'Affiliate WPM', 'item_id' => 'awpm-stripe-' . $mode . '-' . $user->ID, 'data' => array( array( 'name' => 'Stripe ' . $mode . ' connected account', 'value' => $connection['id'] ) ) ); }
+			}
 		}
 		$customers = AWPM_Store::table( 'customers' );
 		$application = get_user_meta( $user->ID, '_awpm_application', true );
@@ -356,7 +365,7 @@ final class AWPM_Account {
 		$user = get_user_by( 'email', $email );
 		$result = array( 'items_removed' => false, 'items_retained' => false, 'messages' => array(), 'done' => true );
 		if ( ! $user ) { return $result; }
-		foreach ( array( '_awpm_token', '_awpm_enrolled', '_awpm_blocked', '_awpm_approval', '_awpm_application' ) as $key ) { $result['items_removed'] = delete_user_meta( $user->ID, $key ) || $result['items_removed']; }
+		foreach ( array( '_awpm_token', '_awpm_enrolled', '_awpm_blocked', '_awpm_approval', '_awpm_application', '_awpm_stripe_test', '_awpm_stripe_live', '_awpm_stripe_oauth', '_awpm_stripe_onboarding', '_awpm_stripe_create_test', '_awpm_stripe_create_live', '_awpm_stripe_country_test', '_awpm_stripe_country_live' ) as $key ) { $result['items_removed'] = delete_user_meta( $user->ID, $key ) || $result['items_removed']; }
 		$customers = AWPM_Store::table( 'customers' );
 		$removed = $wpdb->query( $wpdb->prepare( "DELETE FROM $customers WHERE customer_id=%d OR affiliate_id=%d", $user->ID, $user->ID ) );
 		$result['items_removed'] = $removed > 0 || $result['items_removed'];

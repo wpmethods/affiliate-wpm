@@ -11,19 +11,25 @@ final class AWPM_Payouts {
 		foreach ( AWPM_Settings::methods() as $option ) { if ( $option['id'] === $method_id ) { $method = $option; break; } }
 		if ( ! $method ) { return new WP_Error( 'method', __( 'Choose an active payout method.', 'affiliate-wpm' ) ); }
 		$details = substr( sanitize_textarea_field( $details ), 0, 2000 );
+		$provider = $method['provider'] ?? '';
+		$job = $provider ? AWPM_Gateways::prepare( $provider, $user_id, $details ) : array();
+		if ( is_wp_error( $job ) ) { return $job; }
+		if ( $provider ) { $details = $job['recipient']; }
 		if ( strlen( trim( $details ) ) < 3 ) { return new WP_Error( 'details', __( 'Enter your payment destination details.', 'affiliate-wpm' ) ); }
-		return AWPM_Store::locked( $user_id, function () use ( $wpdb, $user_id, $method, $details ) {
+		return AWPM_Store::locked( $user_id, function () use ( $wpdb, $user_id, $method, $details, $job ) {
 			wp_cache_delete( $user_id, 'user_meta' );
 			if ( ! AWPM_Tracking::active( $user_id ) || ! AWPM_Settings::program_enabled() ) { return new WP_Error( 'inactive', __( 'Your affiliate account is not active.', 'affiliate-wpm' ) ); }
 			$payouts = AWPM_Store::table( 'payouts' );
 			$commissions = AWPM_Store::table( 'commissions' );
-			if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $payouts WHERE affiliate_id=%d AND status IN ('pending','approved') LIMIT 1", $user_id ) ) ) { return new WP_Error( 'pending', __( 'You already have a withdrawal awaiting processing.', 'affiliate-wpm' ) ); }
+			if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $payouts WHERE affiliate_id=%d AND status IN ('pending','approved','processing') LIMIT 1", $user_id ) ) ) { return new WP_Error( 'pending', __( 'You already have a withdrawal awaiting processing.', 'affiliate-wpm' ) ); }
 			$currency = AWPM_Settings::get( 'currency' );
 			$amount = round( AWPM_Store::balance( $user_id, $currency ), AWPM_Currency::precision( $currency ) );
 			if ( $amount <= 0 || $amount < (float) AWPM_Settings::get( 'minimum' ) ) { return new WP_Error( 'minimum', __( 'Your available balance is below the minimum withdrawal.', 'affiliate-wpm' ) ); }
+			if ( $job ) { $job = AWPM_Gateways::quote( $job, $amount, $currency ); if ( is_wp_error( $job ) ) { return $job; } }
 			$now = current_time( 'mysql', true );
 			AWPM_Store::must( $wpdb->insert( $payouts, array( 'affiliate_id' => $user_id, 'amount' => $amount, 'currency' => $currency, 'method' => $method['name'], 'details' => $details, 'status' => 'pending', 'note' => '', 'created_at' => $now, 'updated_at' => $now ) ) );
 			$id = $wpdb->insert_id;
+			if ( $job ) { AWPM_Gateways::store_job( $id, $job ); }
 			AWPM_Store::must( $wpdb->query( $wpdb->prepare( "UPDATE $commissions SET payout_id=%d,status='reserved',updated_at=%s WHERE affiliate_id=%d AND currency=%s AND payout_id=0 AND status IN ('available','paid','rejected') AND amount<>paid_amount", $id, $now, $user_id, $currency ) ) );
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $payouts WHERE id=%d", $id ) );
 			AWPM_Emails::payout( 'withdrawal_admin', $row ); AWPM_Emails::payout( 'withdrawal_affiliate', $row );
@@ -36,6 +42,7 @@ final class AWPM_Payouts {
 		$payouts = AWPM_Store::table( 'payouts' );
 		$commissions = AWPM_Store::table( 'commissions' );
 		$updated = AWPM_Store::must( $wpdb->query( $wpdb->prepare( "UPDATE $payouts SET status='rejected',note=%s,updated_at=%s WHERE id=%d AND status IN ('pending','approved')", $note, current_time( 'mysql', true ), $id ) ) );
+		if ( ! $updated ) { return new WP_Error( 'processing', __( 'Payment has already started or this withdrawal is closed. Funds cannot be released manually.', 'affiliate-wpm' ) ); }
 		AWPM_Store::must( $wpdb->query( $wpdb->prepare( "UPDATE $commissions SET payout_id=0,status=IF(paid_amount>0,'paid','available') WHERE payout_id=%d", $id ) ) );
 		if ( $updated ) {
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $payouts WHERE id=%d", $id ) );
@@ -45,6 +52,9 @@ final class AWPM_Payouts {
 	public static function transition( $id, $status, $note ) {
 		global $wpdb;
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { return new WP_Error( 'forbidden', __( 'Access denied.', 'affiliate-wpm' ) ); }
+		if ( 'processing' === $status ) { return AWPM_Gateways::start( $id ); }
+		if ( 'check' === $status && AWPM_Gateways::job( $id ) ) { $result = AWPM_Gateways::process( $id ); return is_wp_error( $result ) ? $result : true; }
+		if ( 'completed' === $status && AWPM_Gateways::job( $id ) ) { return new WP_Error( 'provider', __( 'Automatic payouts complete only after provider confirmation.', 'affiliate-wpm' ) ); }
 		$table = AWPM_Store::table( 'payouts' );
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id=%d", $id ) );
 		if ( ! $row ) { return new WP_Error( 'missing', __( 'Withdrawal not found.', 'affiliate-wpm' ) ); }
