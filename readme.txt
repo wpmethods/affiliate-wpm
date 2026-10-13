@@ -5,7 +5,7 @@ Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 7.4
 Requires Plugins: woocommerce
-Stable tag: 1.1.1
+Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -104,16 +104,6 @@ Tables use the site's prefix: awpm_commissions, awpm_payouts, awpm_clicks and aw
 Extension hooks include awpm_manual_method_limit, awpm_effective_settings, awpm_exchange_rate, awpm_clean_exchange_rates, awpm_exchange_settings, awpm_export_data_request and awpm_export_data_panel. Premium code lives in a separate plugin, not a hidden directory inside Free.
 
 == Changelog ==
-
-= 1.1.1 =
-* Made the Free affiliate program and settings available without license activation.
-* Separated automatic payouts, currency conversion, CSV exports and additional methods into an optional Pro add-on.
-* Added contextual Premium Feature badges and kept one manual method in Free.
-* Used native WordPress.org updates for Free; kept Pro updates separate.
-* Added full offline documentation and preserved existing financial records during the split.
-
-= 1.0.1 =
-* Added a saved waiting period for commission availability and improved settings layout.
 
 = 1.0.0 =
 * Initial release.
