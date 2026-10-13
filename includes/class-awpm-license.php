@@ -12,7 +12,7 @@ final class AWPM_License {
 		if ( class_exists( 'AWPM_Pro_License', false ) && is_callable( array( 'AWPM_Pro_License', $name ) ) ) { return call_user_func_array( array( 'AWPM_Pro_License', $name ), $args ); }
 		return new WP_Error( 'addon', __( 'Install the separate Affiliate WPM Pro add-on to manage a premium license.', 'affiliate-wpm' ) );
 	}
-	public static function premium_badge() { return '<span class="awpm-premium-badge">' . esc_html__( 'Premium Feature', 'affiliate-wpm' ) . '</span>'; }
+	public static function premium_badge() { if ( self::active() ) { return ''; } return '<span class="awpm-premium-badge">' . esc_html__( 'Premium Feature', 'affiliate-wpm' ) . '</span>'; }
 	public static function premium_link() {
 		return '<a href="' . esc_url( admin_url( 'admin.php?page=affiliate-wpm&tab=license' ) ) . '">' . esc_html( class_exists( 'AWPM_Pro_License', false ) ? __( 'Activate Pro license', 'affiliate-wpm' ) : __( 'Explore Pro add-on', 'affiliate-wpm' ) ) . '</a>';
 	}

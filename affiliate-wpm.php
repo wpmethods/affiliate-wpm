@@ -1,7 +1,7 @@
 <?php
 /**
- * Plugin Name: Affiliate WPM - Affiliate Program for WooCommerce
- * Plugin URI: https://wpmethods.com/
+ * Plugin Name: Affiliate WPM
+ * Plugin URI: https://wpmethods.com/product/affiliatewpm-best-affiliate-plugin-for-woocommerce/
  * Description: WooCommerce referral tracking, product commissions and manual affiliate withdrawals. Optional Pro add-on.
  * Version: 1.0.0
  * Author: WP Methods
