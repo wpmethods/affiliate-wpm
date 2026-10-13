@@ -21,17 +21,21 @@ final class AWPM_Payouts {
 			if ( ! AWPM_Tracking::active( $user_id ) || ! AWPM_Settings::program_enabled() ) { return new WP_Error( 'inactive', __( 'Your affiliate account is not active.', 'affiliate-wpm' ) ); }
 			$payouts = AWPM_Store::table( 'payouts' );
 			$commissions = AWPM_Store::table( 'commissions' );
-			if ( $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $payouts WHERE affiliate_id=%d AND status IN ('pending','approved','processing') LIMIT 1", $user_id ) ) ) { return new WP_Error( 'pending', __( 'You already have a withdrawal awaiting processing.', 'affiliate-wpm' ) ); }
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			if ( $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE affiliate_id=%d AND status IN (\'pending\',\'approved\',\'processing\') LIMIT 1', $payouts, $user_id ) ) ) { return new WP_Error( 'pending', __( 'You already have a withdrawal awaiting processing.', 'affiliate-wpm' ) ); }
 			$currency = AWPM_Settings::get( 'currency' );
 			$amount = round( AWPM_Store::balance( $user_id, $currency ), AWPM_Currency::precision( $currency ) );
 			if ( $amount <= 0 || $amount < (float) AWPM_Settings::get( 'minimum' ) ) { return new WP_Error( 'minimum', __( 'Your available balance is below the minimum withdrawal.', 'affiliate-wpm' ) ); }
 			if ( $job ) { $job = AWPM_Gateways::quote( $job, $amount, $currency ); if ( is_wp_error( $job ) ) { return $job; } }
 			$now = current_time( 'mysql', true );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			AWPM_Store::must( $wpdb->insert( $payouts, array( 'affiliate_id' => $user_id, 'amount' => $amount, 'currency' => $currency, 'method' => $method['name'], 'details' => $details, 'status' => 'pending', 'note' => '', 'created_at' => $now, 'updated_at' => $now ) ) );
 			$id = $wpdb->insert_id;
 			if ( $job ) { AWPM_Gateways::store_job( $id, $job ); }
-			AWPM_Store::must( $wpdb->query( $wpdb->prepare( "UPDATE $commissions SET payout_id=%d,status='reserved',updated_at=%s WHERE affiliate_id=%d AND currency=%s AND payout_id=0 AND status IN ('available','paid','rejected') AND amount<>paid_amount", $id, $now, $user_id, $currency ) ) );
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $payouts WHERE id=%d", $id ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			AWPM_Store::must( $wpdb->query( $wpdb->prepare( 'UPDATE %i SET payout_id=%d,status=\'reserved\',updated_at=%s WHERE affiliate_id=%d AND currency=%s AND payout_id=0 AND status IN (\'available\',\'paid\',\'rejected\') AND amount<>paid_amount', $commissions, $id, $now, $user_id, $currency ) ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id=%d', $payouts, $id ) );
 			AWPM_Emails::payout( 'withdrawal_admin', $row ); AWPM_Emails::payout( 'withdrawal_affiliate', $row );
 			return $id;
 		} );
@@ -41,11 +45,14 @@ final class AWPM_Payouts {
 		global $wpdb;
 		$payouts = AWPM_Store::table( 'payouts' );
 		$commissions = AWPM_Store::table( 'commissions' );
-		$updated = AWPM_Store::must( $wpdb->query( $wpdb->prepare( "UPDATE $payouts SET status='rejected',note=%s,updated_at=%s WHERE id=%d AND status IN ('pending','approved')", $note, current_time( 'mysql', true ), $id ) ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+		$updated = AWPM_Store::must( $wpdb->query( $wpdb->prepare( 'UPDATE %i SET status=\'rejected\',note=%s,updated_at=%s WHERE id=%d AND status IN (\'pending\',\'approved\')', $payouts, $note, current_time( 'mysql', true ), $id ) ) );
 		if ( ! $updated ) { return new WP_Error( 'processing', __( 'Payment has already started or this withdrawal is closed. Funds cannot be released manually.', 'affiliate-wpm' ) ); }
-		AWPM_Store::must( $wpdb->query( $wpdb->prepare( "UPDATE $commissions SET payout_id=0,status=IF(paid_amount>0,'paid','available') WHERE payout_id=%d", $id ) ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+		AWPM_Store::must( $wpdb->query( $wpdb->prepare( 'UPDATE %i SET payout_id=0,status=IF(paid_amount>0,\'paid\',\'available\') WHERE payout_id=%d', $commissions, $id ) ) );
 		if ( $updated ) {
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $payouts WHERE id=%d", $id ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id=%d', $payouts, $id ) );
 			AWPM_Emails::payout( 'payout_affiliate', $row ); AWPM_Emails::payout( 'payout_admin', $row );
 		}
 	}
@@ -56,10 +63,12 @@ final class AWPM_Payouts {
 		if ( 'check' === $status && AWPM_Gateways::job( $id ) ) { $result = AWPM_Gateways::process( $id ); return is_wp_error( $result ) ? $result : true; }
 		if ( 'completed' === $status && AWPM_Gateways::job( $id ) ) { return new WP_Error( 'provider', __( 'Automatic payouts complete only after provider confirmation.', 'affiliate-wpm' ) ); }
 		$table = AWPM_Store::table( 'payouts' );
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id=%d", $id ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+		$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id=%d', $table, $id ) );
 		if ( ! $row ) { return new WP_Error( 'missing', __( 'Withdrawal not found.', 'affiliate-wpm' ) ); }
 		return AWPM_Store::locked( $row->affiliate_id, function () use ( $wpdb, $table, $id, $status, $note ) {
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id=%d", $id ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id=%d', $table, $id ) );
 			if ( ! $row ) { return new WP_Error( 'missing', __( 'Withdrawal not found.', 'affiliate-wpm' ) ); }
 			$allowed = array( 'pending' => array( 'approved', 'rejected' ), 'approved' => array( 'completed', 'rejected' ) );
 			if ( ! in_array( $status, $allowed[ $row->status ] ?? array(), true ) ) { return new WP_Error( 'transition', __( 'This withdrawal cannot move to that status. Refresh the page.', 'affiliate-wpm' ) ); }
@@ -67,12 +76,16 @@ final class AWPM_Payouts {
 			if ( 'rejected' === $status ) { self::release( $id, $note ); return true; }
 			if ( 'completed' === $status ) {
 				$commissions = AWPM_Store::table( 'commissions' );
-				$total = (float) $wpdb->get_var( $wpdb->prepare( "SELECT SUM(amount-paid_amount) FROM $commissions WHERE payout_id=%d", $id ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+				$total = (float) $wpdb->get_var( $wpdb->prepare( 'SELECT SUM(amount-paid_amount) FROM %i WHERE payout_id=%d', $commissions, $id ) );
 				if ( abs( $total - (float) $row->amount ) > 0.000001 ) { return new WP_Error( 'changed', __( 'The reserved balance changed. Reject this request and review the commissions.', 'affiliate-wpm' ) ); }
-				AWPM_Store::must( $wpdb->query( $wpdb->prepare( "UPDATE $commissions SET paid_amount=amount,payout_id=0,status='paid',updated_at=%s WHERE payout_id=%d", current_time( 'mysql', true ), $id ) ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+				AWPM_Store::must( $wpdb->query( $wpdb->prepare( 'UPDATE %i SET paid_amount=amount,payout_id=0,status=\'paid\',updated_at=%s WHERE payout_id=%d', $commissions, current_time( 'mysql', true ), $id ) ) );
 			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			AWPM_Store::must( $wpdb->update( $table, array( 'status' => $status, 'note' => $note, 'updated_at' => current_time( 'mysql', true ) ), array( 'id' => $id ) ) );
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE id=%d", $id ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE id=%d', $table, $id ) );
 			AWPM_Emails::payout( 'payout_affiliate', $row ); AWPM_Emails::payout( 'payout_admin', $row );
 			return true;
 		} );

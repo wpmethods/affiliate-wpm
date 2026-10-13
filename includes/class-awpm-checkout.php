@@ -9,7 +9,11 @@ final class AWPM_Checkout {
 		add_action( 'shutdown', array( __CLASS__, 'finish' ), 5 );
 	}
 	private static function quick_request() {
-		return wp_doing_ajax() && 'POST' === sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) ) && 'quick_order_submit' === AWPM_Security::value( $_POST, 'action' ) && function_exists( 'handle_quick_order_submit_cs' ) && wp_verify_nonce( sanitize_text_field( wp_unslash( AWPM_Security::value( $_POST, 'security' ) ) ), 'quick_order_nonce' );
+		if ( ! wp_doing_ajax() || 'POST' !== sanitize_text_field( wp_unslash( AWPM_Security::value( $_SERVER, 'REQUEST_METHOD' ) ) ) || ! function_exists( 'handle_quick_order_submit_cs' ) ) { return false; }
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- This scalar is the nonce being verified on the next line; no order mutation occurs before verification.
+		$nonce = sanitize_text_field( wp_unslash( AWPM_Security::value( $_POST, 'security' ) ) );
+		if ( ! wp_verify_nonce( $nonce, 'quick_order_nonce' ) ) { return false; }
+		return 'quick_order_submit' === sanitize_key( wp_unslash( AWPM_Security::value( $_POST, 'action' ) ) );
 	}
 	public static function collect( $order ) {
 		if ( ! self::quick_request() || ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || ! $order->get_id() || ! $order->get_items( 'line_item' ) ) { return; }

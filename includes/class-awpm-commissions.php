@@ -43,13 +43,16 @@ final class AWPM_Commissions {
 	private static function prepare_history() {
 		global $wpdb;
 		$table = AWPM_Store::table( 'commissions' );
-		$rows = $wpdb->get_results( "SELECT id,order_id FROM $table WHERE customer_hash='' AND (amount>0 OR paid_amount>0) ORDER BY id ASC LIMIT 100" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id,order_id FROM %i WHERE customer_hash=\'\' AND (amount>0 OR paid_amount>0) ORDER BY id ASC LIMIT 100', $table ) );
 		foreach ( $rows as $row ) {
 			$order = wc_get_order( $row->order_id );
 			$identity = $order ? self::customer_identity( $order ) : array( 'customer_id' => 0, 'customer_hash' => hash( 'sha256', 'deleted-order:' . $row->order_id ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			if ( false === $wpdb->update( $table, $identity, array( 'id' => $row->id ) ) ) { return false; }
 		}
-		return ! $wpdb->get_var( "SELECT id FROM $table WHERE customer_hash='' AND (amount>0 OR paid_amount>0) LIMIT 1" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+		return ! $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE customer_hash=\'\' AND (amount>0 OR paid_amount>0) LIMIT 1', $table ) );
 	}
 	private static function retry( $id ) {
 		// Only pending jobs suppress a retry; the currently running job must be able to reschedule itself.
@@ -114,6 +117,7 @@ final class AWPM_Commissions {
 	private static function discard_placeholder_row( $row ) {
 		global $wpdb;
 		if ( $row && 'pending' === $row->status && 0 === (int) $row->payout_id && 0.0 === (float) $row->paid_amount ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			AWPM_Store::must( $wpdb->delete( AWPM_Store::table( 'commissions' ), array( 'id' => $row->id, 'status' => 'pending', 'payout_id' => 0, 'paid_amount' => 0 ) ) );
 		}
 	}
@@ -125,11 +129,13 @@ final class AWPM_Commissions {
 		if ( ! $order || $order instanceof WC_Order_Refund ) { return; }
 		if ( self::incomplete_order( $order ) ) {
 			$table = AWPM_Store::table( 'commissions' );
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE order_id=%d", $id ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE order_id=%d', $table, $id ) );
 			if ( ! $row ) { return; }
 			return AWPM_Store::locked( (int) $row->affiliate_id, function () use ( $wpdb, $id, $table ) {
 				$current = wc_get_order( $id );
-				if ( $current && self::incomplete_order( $current ) ) { self::discard_placeholder_row( $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE order_id=%d", $id ) ) ); }
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+				if ( $current && self::incomplete_order( $current ) ) { self::discard_placeholder_row( $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE order_id=%d', $table, $id ) ) ); }
 			} );
 		}
 		$affiliate = (int) $order->get_meta( '_awpm_affiliate' );
@@ -148,7 +154,8 @@ final class AWPM_Commissions {
 			// Reload under the lock so an older order-status callback cannot overwrite a refund.
 			$order = wc_get_order( $id );
 			$table = AWPM_Store::table( 'commissions' );
-			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE order_id=%d", $id ) );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE order_id=%d', $table, $id ) );
 			if ( ! $order ) { return; }
 			if ( self::incomplete_order( $order ) ) { self::discard_placeholder_row( $row ); return; }
 			if ( $only_missing && $row ) { return new WP_Error( 'exists', __( 'This order already has a commission record. Its financial history was left unchanged.', 'affiliate-wpm' ) ); }
@@ -165,24 +172,29 @@ final class AWPM_Commissions {
 			if ( 'once' === $policy ) {
 				if ( 'claimed' === $eligibility && $amount <= 0 && ( ! $row || (float) $row->paid_amount <= 0 ) ) { $eligibility = 'eligible'; }
 				if ( 'eligible' === $eligibility && $amount > 0 ) {
-					$match = $wpdb->prepare( 'customer_hash=%s', $identity['customer_hash'] );
-					if ( $identity['customer_id'] ) { $match .= $wpdb->prepare( ' OR customer_id=%d', $identity['customer_id'] ); }
-					$previous = $wpdb->get_var( $wpdb->prepare( "SELECT id FROM $table WHERE order_id<>%d AND ($match) AND ((amount>0 AND status<>'rejected') OR paid_amount>0) LIMIT 1", $id ) );
+					// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+					$previous = $wpdb->get_var( $wpdb->prepare(
+						'SELECT id FROM %i WHERE order_id<>%d AND (customer_hash=%s OR (%d>0 AND customer_id=%d)) AND ((amount>0 AND status<>\'rejected\') OR paid_amount>0) LIMIT 1',
+						$table, $id, $identity['customer_hash'], $identity['customer_id'], $identity['customer_id']
+					) );
 					$eligibility = $previous ? 'repeat' : 'claimed';
 				}
 				if ( 'repeat' === $eligibility ) { $amount = 0; $status = 'rejected'; }
 			}
 			if ( $row && $row->payout_id && ( abs( $amount - (float) $row->amount ) > 0.000001 || 'available' !== $status ) ) {
 				AWPM_Payouts::release( $row->payout_id, __( 'Order changed or refunded. Please request the updated balance again.', 'affiliate-wpm' ) );
-				$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE order_id=%d", $id ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE order_id=%d', $table, $id ) );
 			}
 			if ( $row && $row->payout_id ) { $status = 'reserved'; }
 			elseif ( $row && (float) $row->paid_amount > 0 ) { $status = 'paid'; }
 			$data = array( 'amount' => $amount, 'status' => $status, 'eligibility' => $eligibility, 'updated_at' => current_time( 'mysql', true ) );
 			if ( ! $row || ! $row->customer_hash ) { $data += $identity; }
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			if ( $row ) { AWPM_Store::must( $wpdb->update( $table, $data, array( 'id' => $row->id ) ) ); }
 			else {
 				$data += array( 'order_id' => $id, 'affiliate_id' => $affiliate, 'currency' => $currency, 'created_at' => current_time( 'mysql', true ) );
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 				AWPM_Store::must( $wpdb->insert( $table, $data ) );
 			}
 			if ( 'available' === $status && $amount > 0 && ( ! $row || 'pending' === $row->status ) ) {
@@ -197,6 +209,7 @@ final class AWPM_Commissions {
 		if ( true === $result ) {
 			$order = wc_get_order( $id );
 			$due = (int) $order->get_meta( '_awpm_available_at' );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			if ( $due > time() && $order->has_status( 'completed' ) && 'pending' === $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM %i WHERE order_id=%d', AWPM_Store::table( 'commissions' ), $id ) ) ) { self::schedule_release( $id, $due ); }
 		}
 		return $result;

@@ -37,6 +37,7 @@ final class AWPM_Emails {
 	public static function save() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affiliate-wpm' ), 403 ); }
 		AWPM_Security::admin_request( 'awpm_emails' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
 		update_option( 'awpm_emails', self::clean( isset( $_POST['awpm_emails'] ) && is_array( $_POST['awpm_emails'] ) ? wp_unslash( $_POST['awpm_emails'] ) : array() ), false );
 		wp_safe_redirect( admin_url( 'admin.php?page=affiliate-wpm&tab=emails&saved=1' ) ); exit;
 	}

@@ -12,6 +12,7 @@ final class AWPM_Cache {
 	}
 	public static function early() {
 		if ( '' !== AWPM_Settings::referral_request_key() ) {
+			// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- This compatibility name is defined by WordPress/LiteSpeed and must match the external cache integration API.
 			if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
 			if ( did_action( 'plugins_loaded' ) ) { self::no_cache( 'Affiliate WPM referral landing' ); }
 		}
@@ -23,7 +24,9 @@ final class AWPM_Cache {
 		if ( function_exists( 'is_product' ) && is_product() && is_user_logged_in() && 'yes' === AWPM_Sharing::get( 'enabled' ) && 'yes' === AWPM_Sharing::get( 'product_section' ) ) { self::no_cache( 'Affiliate WPM personalized product sharing' ); }
 	}
 	public static function no_cache( $reason = 'Affiliate WPM private content' ) {
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- This compatibility name is defined by WordPress/LiteSpeed and must match the external cache integration API.
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- This compatibility name is defined by WordPress/LiteSpeed and must match the external cache integration API.
 		do_action( 'litespeed_control_set_nocache', $reason );
 		if ( ! headers_sent() ) {
 			nocache_headers();

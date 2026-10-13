@@ -74,10 +74,12 @@ final class AWPM_Sharing {
 		return true;
 	}
 	public static function ajax() {
-		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) { wp_send_json_error( array( 'message' => __( 'Use the link generator form.', 'affiliate-wpm' ) ), 405 ); }
+		if ( 'POST' !== sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) ) ) { wp_send_json_error( array( 'message' => __( 'Use the link generator form.', 'affiliate-wpm' ) ), 405 ); }
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Read the scalar nonce only to validate it immediately with wp_verify_nonce; no state change occurs before validation.
 		$nonce = sanitize_text_field( wp_unslash( AWPM_Security::value( $_POST, 'nonce' ) ) );
 		if ( ! is_user_logged_in() || ! wp_verify_nonce( $nonce, 'awpm_generate_link' ) ) { wp_send_json_error( array( 'message' => __( 'Your session expired. Refresh and try again.', 'affiliate-wpm' ) ), 403 ); }
-		$url = isset( $_POST['url'] ) && is_string( $_POST['url'] ) ? trim( wp_unslash( $_POST['url'] ) ) : '';
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
+		$url = isset( $_POST['url'] ) && is_string( $_POST['url'] ) ? sanitize_url( trim( wp_unslash( $_POST['url'] ) ), array( 'http', 'https' ) ) : '';
 		$result = self::link( get_current_user_id(), $url );
 		if ( is_wp_error( $result ) ) { wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 ); }
 		wp_send_json_success( array( 'url' => $result ) );
@@ -133,6 +135,7 @@ final class AWPM_Sharing {
 	public static function save() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affiliate-wpm' ), 403 ); }
 		AWPM_Security::admin_request( 'awpm_sharing' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
 		update_option( 'awpm_sharing', self::clean( wp_unslash( $_POST['awpm_sharing'] ?? array() ) ), false );
 		wp_safe_redirect( admin_url( 'admin.php?page=affiliate-wpm&tab=sharing&saved=1' ) ); exit;
 	}

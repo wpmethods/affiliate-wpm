@@ -23,7 +23,8 @@ final class AWPM_Admin {
 	}
 	public static function pending_affiliates_count() {
 		$query = new WP_User_Query( array(
-			'fields' => 'ID', 'number' => 1, 'count_total' => true,
+			'fields' => 'ID', 'number' => 1, 'count_total' => true, 'cache_results' => true,
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Required enrollment/pending predicates; WordPress caches IDs and totals and invalidates them when user metadata changes.
 			'meta_query' => array(
 				'relation' => 'AND',
 				array( 'key' => '_awpm_enrolled', 'value' => 'yes' ),
@@ -36,7 +37,8 @@ final class AWPM_Admin {
 		global $wpdb;
 		$commissions = AWPM_Store::table( 'commissions' );
 		$payouts = AWPM_Store::table( 'payouts' );
-		$counts = $wpdb->get_row( $wpdb->prepare( "SELECT (SELECT COUNT(*) FROM $commissions WHERE status=%s) AS commissions, (SELECT COUNT(*) FROM $payouts WHERE status=%s) AS payouts", 'pending', 'pending' ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
+		$counts = $wpdb->get_row( $wpdb->prepare( 'SELECT (SELECT COUNT(*) FROM %i WHERE status=%s) AS commissions, (SELECT COUNT(*) FROM %i WHERE status=%s) AS payouts', $commissions, 'pending', $payouts, 'pending' ), ARRAY_A );
 		return array( 'affiliates' => self::pending_affiliates_count(), 'commissions' => absint( $counts['commissions'] ?? 0 ), 'payouts' => absint( $counts['payouts'] ?? 0 ) );
 	}
 	public static function pending_badge( $count ) {
@@ -57,9 +59,12 @@ final class AWPM_Admin {
 	}
 	public static function payout_action() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affiliate-wpm' ), 403 ); }
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Validated integer ID is read only to construct the entity-specific nonce; admin_request() verifies that nonce before mutation.
 		$id = absint( AWPM_Security::value( $_POST, 'payout_id', '0' ) );
 		AWPM_Security::admin_request( 'awpm_payout_' . $id );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
 		$status = sanitize_key( wp_unslash( AWPM_Security::value( $_POST, 'status' ) ) );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
 		$note = sanitize_textarea_field( wp_unslash( AWPM_Security::value( $_POST, 'note' ) ) );
 		$result = AWPM_Payouts::transition( $id, $status, $note );
 		$url = add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => 'payouts', 'awpm_message' => is_wp_error( $result ) ? $result->get_error_message() : __( 'Withdrawal updated.', 'affiliate-wpm' ), 'awpm_error' => is_wp_error( $result ) ? 1 : 0 ), admin_url( 'admin.php' ) );
@@ -67,8 +72,10 @@ final class AWPM_Admin {
 	}
 	public static function affiliate_action() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affiliate-wpm' ), 403 ); }
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Validated integer ID is read only to construct the entity-specific nonce; admin_request() verifies that nonce before mutation.
 		$id = absint( AWPM_Security::value( $_POST, 'affiliate_id', '0' ) );
 		AWPM_Security::admin_request( 'awpm_affiliate_' . $id );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
 		$operation = sanitize_key( wp_unslash( AWPM_Security::value( $_POST, 'operation' ) ) ); $result = true;
 		if ( in_array( $operation, array( 'approved', 'rejected' ), true ) ) { $result = AWPM_Affiliates::review( $id, $operation ); }
 		elseif ( get_userdata( $id ) && in_array( $operation, array( 'block', 'unblock' ), true ) ) { $result = AWPM_Affiliates::set_blocked( $id, 'block' === $operation ); }
@@ -83,6 +90,7 @@ final class AWPM_Admin {
 		if ( current_user_can( 'manage_options' ) ) { $tabs['license'] = class_exists( 'AWPM_Pro_License', false ) ? __( 'License', 'affiliate-wpm' ) : __( 'Premium', 'affiliate-wpm' ); }
 		$descriptions['tools'] = __( 'Back up and restore settings, reset defaults and export your program records.', 'affiliate-wpm' );
 		$descriptions['license'] = __( 'Manage your license and receive updates from WP Methods.', 'affiliate-wpm' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
 		$tab = sanitize_key( AWPM_Security::value( $_GET, 'tab', 'overview' ) );
 		if ( ! isset( $tabs[ $tab ] ) ) { $tab = 'overview'; }
 		$active = AWPM_Settings::program_enabled();
@@ -91,7 +99,9 @@ final class AWPM_Admin {
 		foreach ( $tabs as $key => $label ) { echo '<a class="' . ( $key === $tab ? 'is-active' : '' ) . '" href="' . esc_url( admin_url( 'admin.php?page=affiliate-wpm&tab=' . $key ) ) . '"' . ( $key === $tab ? ' aria-current="page"' : '' ) . '>' . wp_kses( AWPM_UI::icon( $key ), AWPM_UI::allowed_html() ) . '<span>' . esc_html( $label ) . '</span>' . wp_kses_post( self::pending_badge( $pending_counts[ $key ] ?? 0 ) ) . '</a>'; }
 		echo '</nav><div class="awpm-sidebar-note">' . wp_kses( AWPM_UI::icon( 'shield' ), AWPM_UI::allowed_html() ) . '<strong>' . esc_html__( 'Built for your store', 'affiliate-wpm' ) . '</strong><p>' . esc_html__( 'Simple referrals. Clear earnings. Payouts under your control.', 'affiliate-wpm' ) . '</p></div></aside><main class="awpm-main" id="awpm-main"><div class="awpm-heading"><span class="awpm-eyebrow">' . esc_html__( 'YOUR PARTNER PROGRAM', 'affiliate-wpm' ) . '</span><h2>' . esc_html( $tabs[ $tab ] ) . '</h2><p>' . esc_html( $descriptions[ $tab ] ) . '</p></div>';
 		AWPM_License::activation_notice( true );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
 		if ( '1' === AWPM_Security::value( $_GET, 'saved' ) ) { AWPM_UI::toast( __( 'Settings saved.', 'affiliate-wpm' ) ); }
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
 		if ( isset( $_GET['awpm_message'] ) && is_scalar( $_GET['awpm_message'] ) ) { AWPM_UI::toast( sanitize_text_field( wp_unslash( $_GET['awpm_message'] ) ), '1' === AWPM_Security::value( $_GET, 'awpm_error' ) ); }
 		if ( 'settings' === $tab ) { self::settings(); }
 		elseif ( 'overview' === $tab ) { self::overview(); }
@@ -109,10 +119,14 @@ final class AWPM_Admin {
 		$commissions = AWPM_Store::table( 'commissions' );
 		$payouts = AWPM_Store::table( 'payouts' );
 		$currency = AWPM_Settings::get( 'currency' );
-		$pending = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $commissions WHERE currency=%s AND status='pending'", $currency ) );
-		$available = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount-paid_amount),0) FROM $commissions WHERE currency=%s AND payout_id=0 AND status IN ('available','paid','rejected')", $currency ) );
-		$requested = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount),0) FROM $payouts WHERE currency=%s AND status IN ('pending','approved','processing')", $currency ) );
-		$paid = $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(paid_amount),0) FROM $commissions WHERE currency=%s", $currency ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
+		$pending = $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(amount),0) FROM %i WHERE currency=%s AND status=\'pending\'', $commissions, $currency ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
+		$available = $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(amount-paid_amount),0) FROM %i WHERE currency=%s AND payout_id=0 AND status IN (\'available\',\'paid\',\'rejected\')', $commissions, $currency ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
+		$requested = $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(amount),0) FROM %i WHERE currency=%s AND status IN (\'pending\',\'approved\',\'processing\')', $payouts, $currency ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
+		$paid = $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(paid_amount),0) FROM %i WHERE currency=%s', $commissions, $currency ) );
 		echo '<div class="awpm-metrics">';
 		echo wp_kses( AWPM_UI::metric( __( 'Pending commissions', 'affiliate-wpm' ), AWPM_Store::money( $pending, $currency ), 'clock' ), AWPM_UI::allowed_html() );
 		echo wp_kses( AWPM_UI::metric( __( 'Available earnings', 'affiliate-wpm' ), AWPM_Store::money( $available, $currency ), 'wallet' ), AWPM_UI::allowed_html() );
@@ -143,12 +157,14 @@ final class AWPM_Admin {
 	private static function overview_lists() {
 		global $wpdb;
 		$table = AWPM_Store::table( 'payouts' );
-		$rows = $wpdb->get_results( "SELECT * FROM $table ORDER BY id DESC LIMIT 5" );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
+		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i ORDER BY id DESC LIMIT 5', $table ) );
 		echo '<div class="awpm-grid"><section class="awpm-card" id="awpm-overview-withdrawals"><div class="awpm-overview-heading"><h2>' . esc_html__( 'Latest withdrawal requests', 'affiliate-wpm' ) . '</h2><a class="awpm-overview-link" href="' . esc_url( admin_url( 'admin.php?page=affiliate-wpm&tab=payouts' ) ) . '">' . esc_html__( 'See more withdrawals', 'affiliate-wpm' ) . '</a></div><div class="awpm-table-scroll"><table><thead><tr><th>' . esc_html__( 'Affiliate', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Amount', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Status', 'affiliate-wpm' ) . '</th></tr></thead><tbody>';
 		foreach ( $rows as $row ) { echo '<tr><td>' . wp_kses_post( self::identity( $row->affiliate_id ) ) . '</td><td>' . wp_kses_post( AWPM_Store::money( $row->amount, $row->currency ) ) . '</td><td>' . wp_kses_post( AWPM_Store::status( $row->status ) ) . '</td></tr>'; }
 		if ( ! $rows ) { echo '<tr><td colspan="3" class="awpm-empty">' . esc_html__( 'No withdrawal requests yet.', 'affiliate-wpm' ) . '</td></tr>'; }
 		echo '</tbody></table></div></section>';
-		$users = get_users( array( 'meta_key' => '_awpm_enrolled', 'meta_value' => 'yes', 'number' => 5, 'orderby' => 'ID', 'order' => 'DESC' ) );
+		// phpcs:ignore WordPress.DB.SlowDBQuery -- Required enrolled-affiliate predicate; only five users are fetched, no total count, with native WordPress query caching.
+		$users = get_users( array( 'count_total' => false, 'cache_results' => true, 'meta_key' => '_awpm_enrolled', 'meta_value' => 'yes', 'number' => 5, 'orderby' => 'ID', 'order' => 'DESC' ) );
 		echo '<section class="awpm-card" id="awpm-overview-affiliates"><div class="awpm-overview-heading"><h2>' . esc_html__( 'Latest affiliates', 'affiliate-wpm' ) . '</h2><a class="awpm-overview-link" href="' . esc_url( admin_url( 'admin.php?page=affiliate-wpm&tab=affiliates' ) ) . '">' . esc_html__( 'See more affiliates', 'affiliate-wpm' ) . '</a></div><div class="awpm-table-scroll"><table><thead><tr><th>' . esc_html__( 'Affiliate', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Account', 'affiliate-wpm' ) . '</th></tr></thead><tbody>';
 		foreach ( $users as $user ) { echo '<tr><td>' . wp_kses_post( self::identity( $user->ID ) ) . '</td><td>' . ( 'yes' === get_user_meta( $user->ID, '_awpm_blocked', true ) ? esc_html__( 'Blocked', 'affiliate-wpm' ) : wp_kses_post( AWPM_Store::status( AWPM_Affiliates::status( $user->ID ) ) ) ) . '</td></tr>'; }
 		if ( ! $users ) { echo '<tr><td colspan="2" class="awpm-empty">' . esc_html__( 'No affiliates yet.', 'affiliate-wpm' ) . '</td></tr>'; }
@@ -211,12 +227,14 @@ final class AWPM_Admin {
 		return $user ? '<strong>' . esc_html( $user->display_name ) . '</strong><small class="awpm-note">' . esc_html( $user->user_email ) . '</small>' : '#' . absint( $id );
 	}
 	private static function search_term() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
 		return mb_substr( sanitize_text_field( wp_unslash( AWPM_Security::value( $_GET, 'q' ) ) ), 0, 160 );
 	}
 	private static function list_statuses( $tab ) {
 		return 'affiliates' === $tab ? array( 'pending', 'approved', 'rejected', 'blocked' ) : ( 'payouts' === $tab ? array( 'pending', 'approved', 'processing', 'completed', 'tested', 'failed', 'rejected' ) : array( 'pending', 'available', 'reserved', 'paid', 'rejected' ) );
 	}
 	private static function list_status( $tab ) {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
 		$status = sanitize_key( AWPM_Security::value( $_GET, 'status' ) );
 		return in_array( $status, self::list_statuses( $tab ), true ) ? $status : '';
 	}
@@ -230,12 +248,16 @@ final class AWPM_Admin {
 		echo '</form>';
 	}
 	private static function affiliates() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
 		$page = AWPM_Security::page( $_GET, 'paged' );
-		$args = array( 'meta_key' => '_awpm_enrolled', 'meta_value' => 'yes', 'number' => self::PAGE_SIZE, 'offset' => ( $page - 1 ) * self::PAGE_SIZE, 'orderby' => 'ID', 'order' => 'DESC' );
+		// phpcs:ignore WordPress.DB.SlowDBQuery -- Required enrollment predicate; results are paginated at ten users and WordPress caches query IDs/totals.
+		$args = array( 'cache_results' => true, 'meta_key' => '_awpm_enrolled', 'meta_value' => 'yes', 'number' => self::PAGE_SIZE, 'offset' => ( $page - 1 ) * self::PAGE_SIZE, 'orderby' => 'ID', 'order' => 'DESC' );
 		$search = self::search_term(); $status = self::list_status( 'affiliates' );
 		if ( '' !== $search ) { $args['search'] = '*' . ltrim( $search, '#' ) . '*'; $args['search_columns'] = array( 'user_login', 'user_email', 'display_name', 'ID' ); }
+		// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Required account-status predicate for this paginated, cached user query.
 		if ( 'blocked' === $status ) { $args['meta_query'] = array( array( 'key' => '_awpm_blocked', 'value' => 'yes' ) ); }
 		elseif ( '' !== $status ) {
+			// phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_query -- Preserve legacy approval and blocked-account semantics; native user-query caches are invalidated by metadata updates.
 			$args['meta_query'] = array( 'relation' => 'AND', array( 'relation' => 'OR', array( 'key' => '_awpm_blocked', 'compare' => 'NOT EXISTS' ), array( 'key' => '_awpm_blocked', 'value' => 'yes', 'compare' => '!=' ) ) );
 			$args['meta_query'][] = 'approved' === $status ? array( 'relation' => 'OR', array( 'key' => '_awpm_approval', 'compare' => 'NOT EXISTS' ), array( 'key' => '_awpm_approval', 'value' => array( 'pending', 'rejected' ), 'compare' => 'NOT IN' ) ) : array( 'key' => '_awpm_approval', 'value' => $status );
 		}
@@ -273,25 +295,25 @@ final class AWPM_Admin {
 	private static function records( $type ) {
 		global $wpdb;
 		$table = AWPM_Store::table( $type );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
 		$page = AWPM_Security::page( $_GET, 'paged' );
 		$status = self::list_status( $type ); $search = self::search_term();
-		$clauses = array(); $join = '';
-		if ( '' !== $status ) { $clauses[] = $wpdb->prepare( 'r.status=%s', $status ); }
-		if ( '' !== $search ) {
-			$join = " LEFT JOIN $wpdb->users u ON u.ID=r.affiliate_id";
-			$like = '%' . $wpdb->esc_like( $search ) . '%';
-			$match = $wpdb->prepare( '(u.user_login LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s)', $like, $like, $like );
-			$number = ltrim( $search, '#' );
-			if ( ctype_digit( $number ) && strlen( $number ) <= 18 ) {
-				$match .= $wpdb->prepare( ' OR r.id=%d OR r.affiliate_id=%d', (int) $number, (int) $number );
-				if ( 'commissions' === $type ) { $match .= $wpdb->prepare( ' OR r.order_id=%d', (int) $number ); }
-			}
-			$clauses[] = '(' . $match . ')';
-		}
-		$where = $clauses ? ' WHERE ' . implode( ' AND ', $clauses ) : '';
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM $table r$join$where" );
+		$like = '%' . $wpdb->esc_like( $search ) . '%';
+		$number = ltrim( $search, '#' );
+		$numeric = ctype_digit( $number ) && strlen( $number ) <= 18;
+		$number = $numeric ? (int) $number : 0;
+		$order_column = 'commissions' === $type ? 'order_id' : 'id';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
+		$count = (int) $wpdb->get_var( $wpdb->prepare(
+			'SELECT COUNT(*) FROM %i r LEFT JOIN %i u ON u.ID=r.affiliate_id WHERE (%s=\'\' OR r.status=%s) AND (%s=\'\' OR u.user_login LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s OR (%d=1 AND (r.id=%d OR r.affiliate_id=%d OR r.%i=%d)))',
+			$table, $wpdb->users, $status, $status, $search, $like, $like, $like, (int) $numeric, $number, $number, $order_column, $number
+		) );
 		$page = min( $page, max( 1, (int) ceil( $count / self::PAGE_SIZE ) ) );
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT r.* FROM $table r$join$where ORDER BY r.id DESC LIMIT %d OFFSET %d", self::PAGE_SIZE, ( $page - 1 ) * self::PAGE_SIZE ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
+		$rows = $wpdb->get_results( $wpdb->prepare(
+			'SELECT r.* FROM %i r LEFT JOIN %i u ON u.ID=r.affiliate_id WHERE (%s=\'\' OR r.status=%s) AND (%s=\'\' OR u.user_login LIKE %s OR u.user_email LIKE %s OR u.display_name LIKE %s OR (%d=1 AND (r.id=%d OR r.affiliate_id=%d OR r.%i=%d))) ORDER BY r.id DESC LIMIT %d OFFSET %d',
+			$table, $wpdb->users, $status, $status, $search, $like, $like, $like, (int) $numeric, $number, $number, $order_column, $number, self::PAGE_SIZE, ( $page - 1 ) * self::PAGE_SIZE
+		) );
 		echo '<section class="awpm-card"><div class="awpm-card-toolbar"><h2>' . esc_html( 'payouts' === $type ? __( 'Withdrawal requests', 'affiliate-wpm' ) : __( 'Commission ledger', 'affiliate-wpm' ) ) . '</h2>'; self::filters( $type ); echo '</div>';
 		if ( 'payouts' === $type ) { echo '<p class="awpm-muted">' . esc_html__( 'Approve each request first. For manual methods, send money outside the plugin and choose Mark paid. For PayPal or Stripe, choose Send payment; completion requires provider confirmation. Sandbox/Test does not settle real earnings. Notes are visible to the affiliate.', 'affiliate-wpm' ) . '</p>'; }
 		echo '<div class="awpm-table-scroll"><table><thead><tr><th>#</th><th>' . esc_html__( 'Affiliate', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Amount', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Status', 'affiliate-wpm' ) . '</th><th>' . esc_html__( 'Date', 'affiliate-wpm' ) . '</th><th>' . esc_html( 'payouts' === $type ? __( 'Payment & action', 'affiliate-wpm' ) : __( 'Order / paid', 'affiliate-wpm' ) ) . '</th></tr></thead><tbody>';

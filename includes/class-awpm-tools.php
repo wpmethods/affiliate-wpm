@@ -26,17 +26,20 @@ final class AWPM_Tools {
 	}
 	private static function apply( $settings ) { foreach ( $settings as $key => $value ) { update_option( $key, $value, false ); } }
 	private static function upload() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Private upload helper runs only after guard() verifies POST, capability and awpm_tools nonce. Validate the uploaded-file scalar path using is_uploaded_file, size and JSON schema checks; do not alter the OS temporary path.
 		$file = isset( $_FILES['backup'] ) && is_array( $_FILES['backup'] ) ? $_FILES['backup'] : array();
 		$path = AWPM_Security::value( $file, 'tmp_name' );
 		if ( '0' !== AWPM_Security::value( $file, 'error', '-1' ) || ! $path || ! is_uploaded_file( $path ) || filesize( $path ) > self::MAX_BACKUP_SIZE ) { return new WP_Error( 'upload', __( 'Upload a valid JSON settings backup, maximum 1 MB.', 'affiliate-wpm' ) ); }
 		return self::decode_backup( file_get_contents( $path ) );
 	}
 	public static function submit() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
 		$operation = AWPM_Security::value( $_POST, 'operation' ); self::guard( $operation );
 		if ( 'backup' === $operation ) { self::download_headers( 'settings', 'json', 'application/json' ); echo wp_json_encode( self::backup(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ); exit; }
 		if ( 'csv' === $operation ) { do_action( 'awpm_export_data_request' ); wp_die( esc_html__( 'CSV export is available in the separate Affiliate WPM Pro add-on.', 'affiliate-wpm' ), '', array( 'response' => 403 ) ); }
 		if ( 'restore' === $operation ) { $result = self::upload(); if ( ! is_wp_error( $result ) ) { self::apply( $result ); $result = __( 'Settings restored successfully.', 'affiliate-wpm' ); } }
 		elseif ( 'reset' === $operation ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
 			if ( 'RESET' !== AWPM_Security::value( $_POST, 'confirmation' ) ) { $result = new WP_Error( 'confirm', __( 'Type RESET to confirm resetting plugin settings.', 'affiliate-wpm' ) ); }
 			else { self::apply( self::defaults() ); $result = __( 'Plugin settings reset to defaults. Your license and financial records were preserved.', 'affiliate-wpm' ); }
 		} else { $result = new WP_Error( 'operation', __( 'Unknown tools action.', 'affiliate-wpm' ) ); }

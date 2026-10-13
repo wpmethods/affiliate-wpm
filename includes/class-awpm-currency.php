@@ -41,11 +41,13 @@ final class AWPM_Currency {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { return new WP_Error( 'permission', __( 'Access denied.', 'affiliate-wpm' ) ); }
 		global $wpdb; $order = wc_get_order( absint( $id ) );
 		if ( ! $order || $order instanceof WC_Order_Refund || ! $order->get_meta( '_awpm_affiliate' ) || ! $order->get_meta( '_awpm_rates' ) ) { return new WP_Error( 'order', __( 'This order has no saved affiliate attribution.', 'affiliate-wpm' ) ); }
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
 		if ( $wpdb->get_var( $wpdb->prepare( 'SELECT id FROM %i WHERE order_id=%d', AWPM_Store::table( 'commissions' ), $order->get_id() ) ) ) { return new WP_Error( 'exists', __( 'This order already has a commission record. Its financial history was left unchanged.', 'affiliate-wpm' ) ); }
 		return AWPM_Commissions::sync( $order, true );
 	}
 	public static function recover() {
 		AWPM_Security::admin_request( 'awpm_currency_recovery' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
 		$result = self::retry_order( AWPM_Security::value( $_POST, 'order_id' ) );
 		set_transient( 'awpm_currency_result_' . get_current_user_id(), is_wp_error( $result ) ? $result->get_error_message() : __( 'Order processed using its saved attribution and exchange rate. Check Commissions for its status.', 'affiliate-wpm' ), 60 );
 		wp_safe_redirect( admin_url( 'admin.php?page=affiliate-wpm&tab=settings' ) ); exit;

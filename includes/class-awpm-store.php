@@ -4,6 +4,7 @@ defined( 'ABSPATH' ) || exit;
 final class AWPM_Store {
 	public static function table( $name ) {
 		global $wpdb;
+		if ( ! in_array( $name, array( 'commissions', 'payouts', 'clicks', 'customers' ), true ) ) { throw new InvalidArgumentException( 'Unknown Affiliate WPM table.' ); }
 		return $wpdb->prefix . 'awpm_' . $name;
 	}
 
@@ -75,20 +76,25 @@ final class AWPM_Store {
 		$keys = array_unique( $keys ); sort( $keys ); $held = array(); $committed = false;
 		try {
 			foreach ( $keys as $key ) {
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 				if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $key ) ) ) {
 					return new WP_Error( 'busy', __( 'Your balance is being updated. Please try again.', 'affiliate-wpm' ) );
 				}
 				$held[] = $key;
 			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			self::must( $wpdb->query( 'START TRANSACTION' ) );
 			$result = call_user_func( $callback );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			if ( is_wp_error( $result ) ) { self::must( $wpdb->query( 'ROLLBACK' ) ); } else { self::must( $wpdb->query( 'COMMIT' ) ); }
 			$committed = ! is_wp_error( $result );
 			return $result;
 		} catch ( Throwable $error ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			$wpdb->query( 'ROLLBACK' );
 			return new WP_Error( 'storage', __( 'The update could not be saved. Please try again.', 'affiliate-wpm' ) );
 		} finally {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			foreach ( array_reverse( $held ) as $key ) { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $key ) ); }
 			if ( ! $committed ) { wp_cache_delete( absint( $affiliate_id ), 'user_meta' ); }
 			AWPM_Emails::finish( $committed );
@@ -105,14 +111,20 @@ final class AWPM_Store {
 	public static function balance( $user_id, $currency ) {
 		global $wpdb;
 		$table = self::table( 'commissions' );
-		return (float) $wpdb->get_var( $wpdb->prepare( "SELECT COALESCE(SUM(amount - paid_amount),0) FROM $table WHERE affiliate_id=%d AND currency=%s AND payout_id=0 AND status IN ('available','paid','rejected')", $user_id, $currency ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+		return (float) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(amount - paid_amount),0) FROM %i WHERE affiliate_id=%d AND currency=%s AND payout_id=0 AND status IN (\'available\',\'paid\',\'rejected\')', $table, $user_id, $currency ) );
 	}
 	public static function referral_stats( $affiliate_id = null ) {
 		global $wpdb;
 		$clicks = self::table( 'clicks' );
 		$customers = self::table( 'customers' );
-		$where = null === $affiliate_id ? '' : $wpdb->prepare( ' WHERE affiliate_id=%d', $affiliate_id );
-		return array( 'clicks' => (int) $wpdb->get_var( "SELECT COALESCE(SUM(clicks),0) FROM $clicks$where" ), 'customers' => (int) $wpdb->get_var( "SELECT COUNT(*) FROM $customers$where" ) );
+		$all = null === $affiliate_id ? 1 : 0;
+		$id = absint( $affiliate_id );
+		return array(
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
+			'clicks' => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COALESCE(SUM(clicks),0) FROM %i WHERE (%d=1 OR affiliate_id=%d)', $clicks, $all, $id ) ),
+			'customers' => (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE (%d=1 OR affiliate_id=%d)', $customers, $all, $id ) ),
+		);
 	}
 
 	public static function money( $amount, $currency = '' ) {

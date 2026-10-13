@@ -40,10 +40,13 @@ final class AWPM_Tracking {
 	}
 	public static function capture() {
 		$key = AWPM_Settings::referral_request_key();
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Public referral URLs must work for guests without expiring nonces; token format, affiliate eligibility and consent are checked before attribution.
 		if ( ! AWPM_Settings::program_enabled() || ! $key || ! isset( $_GET[ $key ] ) || ! is_scalar( $_GET[ $key ] ) || is_admin() || headers_sent() ) { return; }
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Public referral URLs must work for guests without expiring nonces; token format, affiliate eligibility and consent are checked before attribution.
 		$token = sanitize_text_field( wp_unslash( $_GET[ $key ] ) );
 		if ( ! preg_match( '/^[a-z0-9]{32}$/', $token ) ) { return; }
-		$users = get_users( array( 'meta_key' => '_awpm_token', 'meta_value' => $token, 'number' => 1, 'fields' => 'ID' ) );
+		// phpcs:ignore WordPress.DB.SlowDBQuery -- Exact validated token lookup returns one ID with no count; WordPress caches the query, and eligibility is checked separately.
+		$users = get_users( array( 'count_total' => false, 'cache_results' => true, 'meta_key' => '_awpm_token', 'meta_value' => $token, 'number' => 1, 'fields' => 'ID' ) );
 		$id = $users ? (int) $users[0] : 0;
 		if ( ! self::active( $id ) || $id === get_current_user_id() ) { return; }
 		// Consent integrations can veto tracking before a cookie is created.
@@ -54,6 +57,7 @@ final class AWPM_Tracking {
 		$value = self::payload( $id, $expires );
 		setcookie( self::COOKIE, $value, array( 'expires' => $expires, 'path' => '/', 'secure' => is_ssl(), 'httponly' => true, 'samesite' => 'Lax' ) );
 		$_COOKIE[ self::COOKIE ] = $value;
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- This compatibility name is defined by WordPress/LiteSpeed and must match the external cache integration API.
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
 		nocache_headers();
 	}
@@ -61,7 +65,8 @@ final class AWPM_Tracking {
 		global $wpdb;
 		if ( ! AWPM_Settings::program_enabled() || ! self::active( $id ) || $id === get_current_user_id() || ! apply_filters( 'awpm_tracking_allowed', true, $id ) || self::cookie_id( self::CLICK_COOKIE ) === $id ) { return false; }
 		$table = AWPM_Store::table( 'clicks' );
-		$result = $wpdb->query( $wpdb->prepare( "INSERT INTO $table (affiliate_id,click_date,clicks) VALUES (%d,%s,1) ON DUPLICATE KEY UPDATE clicks=clicks+1", $id, current_time( 'Y-m-d' ) ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom aggregate/referral table has no WordPress CRUD API; the statement must read or update current counters.
+		$result = $wpdb->query( $wpdb->prepare( 'INSERT INTO %i (affiliate_id,click_date,clicks) VALUES (%d,%s,1) ON DUPLICATE KEY UPDATE clicks=clicks+1', $table, $id, current_time( 'Y-m-d' ) ) );
 		if ( false === $result ) { return false; }
 		$expires = time() + 30 * MINUTE_IN_SECONDS;
 		$value = self::payload( $id, $expires );
@@ -69,6 +74,7 @@ final class AWPM_Tracking {
 			setcookie( self::CLICK_COOKIE, $value, array( 'expires' => $expires, 'path' => '/', 'secure' => is_ssl(), 'httponly' => true, 'samesite' => 'Lax' ) );
 			nocache_headers();
 		}
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound -- This compatibility name is defined by WordPress/LiteSpeed and must match the external cache integration API.
 		if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
 		$_COOKIE[ self::CLICK_COOKIE ] = $value;
 		return true;
@@ -81,12 +87,15 @@ final class AWPM_Tracking {
 		if ( ! AWPM_Settings::program_enabled() || ! $customer || ! $affiliate || $id === (int) $customer_id || ! array_intersect( array( 'customer', 'subscriber' ), $customer->roles ) || strtolower( $customer->user_email ) === strtolower( $affiliate->user_email ) || ! apply_filters( 'awpm_tracking_allowed', true, $id ) ) { return; }
 		$table = AWPM_Store::table( 'customers' );
 		// A customer can only be attributed once, even if both creation hooks fire.
-		$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO $table (customer_id,affiliate_id,created_at) VALUES (%d,%d,%s)", $customer_id, $id, current_time( 'mysql', true ) ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom aggregate/referral table has no WordPress CRUD API; the statement must read or update current counters.
+		$wpdb->query( $wpdb->prepare( 'INSERT IGNORE INTO %i (customer_id,affiliate_id,created_at) VALUES (%d,%d,%s)', $table, $customer_id, $id, current_time( 'mysql', true ) ) );
 	}
 	public static function delete_customer( $customer_id ) {
 		global $wpdb;
 		$table = AWPM_Store::table( 'customers' );
-		$wpdb->query( $wpdb->prepare( "DELETE FROM $table WHERE customer_id=%d OR affiliate_id=%d", $customer_id, $customer_id ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom aggregate/referral table has no WordPress CRUD API; the statement must read or update current counters.
+		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE customer_id=%d OR affiliate_id=%d', $table, $customer_id, $customer_id ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom aggregate/referral table has no WordPress CRUD API; the statement must read or update current counters.
 		$wpdb->delete( AWPM_Store::table( 'clicks' ), array( 'affiliate_id' => $customer_id ) );
 	}
 	public static function attach( $order ) {

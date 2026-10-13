@@ -28,6 +28,7 @@ final class AWPM_Settings {
 	}
 	public static function referral_keys() { return array_values( array_unique( array( self::referral_parameter(), 'awpm_ref' ) ) ); }
 	public static function referral_request_key() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Public referral URLs must work for guests without expiring nonces; token format, affiliate eligibility and consent are checked before attribution.
 		foreach ( self::referral_keys() as $key ) { if ( isset( $_GET[ $key ] ) ) { return $key; } }
 		return '';
 	}
@@ -137,17 +138,21 @@ final class AWPM_Settings {
 	public static function save() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affiliate-wpm' ), 403 ); }
 		AWPM_Security::admin_request( 'awpm_settings' );
-		$input = isset( $_POST['awpm'] ) && is_array( $_POST['awpm'] ) ? wp_unslash( $_POST['awpm'] ) : array();
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
+		$input = self::clean( isset( $_POST['awpm'] ) && is_array( $_POST['awpm'] ) ? wp_unslash( $_POST['awpm'] ) : array() );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
 		if ( isset( $_POST['awpm_gateway'] ) ) {
 			if ( ! AWPM_License::active() ) { wp_die( esc_html__( 'Automatic payout settings belong to the separate Pro add-on.', 'affiliate-wpm' ), '', array( 'response' => 403 ) ); }
 			if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Only administrators can configure automatic payout credentials.', 'affiliate-wpm' ), '', array( 'response' => 403 ) ); }
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
 			$gateways = AWPM_Gateways::clean( wp_unslash( $_POST['awpm_gateway'] ) );
 			if ( is_wp_error( $gateways ) ) { wp_safe_redirect( add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => 'settings', 'awpm_error' => 1, 'awpm_message' => $gateways->get_error_message() ), admin_url( 'admin.php' ) ) ); exit; }
 			update_option( AWPM_Gateways::OPTION, $gateways, false );
 		}
-		update_option( 'awpm_settings', self::clean( $input ), false );
+		update_option( 'awpm_settings', $input, false );
 		if ( isset( $gateways ) ) {
 			$result = AWPM_Gateways::verify_paypal();
+			// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- AWPM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. Pro setup validates mode and whsec_ secrets against its schema; only authorized, nonce-verified administrators reach this call.
 			if ( ! is_wp_error( $result ) ) { $result = AWPM_Stripe::setup( wp_unslash( $_POST['awpm_gateway'] ) ); }
 			if ( is_wp_error( $result ) ) { wp_safe_redirect( add_query_arg( array( 'page' => 'affiliate-wpm', 'tab' => 'settings', 'saved' => 1, 'awpm_error' => 1, 'awpm_message' => $result->get_error_message() ), admin_url( 'admin.php' ) ) ); exit; }
 		}
@@ -162,8 +167,10 @@ final class AWPM_Settings {
 	}
 	public static function save_product( $product ) {
 		if ( ! current_user_can( 'edit_post', $product->get_id() ) ) { return; }
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Called from woocommerce_admin_process_product_object after WooCommerce validates its product-save nonce; edit_post capability is also required.
 		$type = sanitize_key( wp_unslash( AWPM_Security::value( $_POST, '_awpm_type' ) ) );
 		$type = in_array( $type, array( 'percent', 'fixed', 'disabled' ), true ) ? $type : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Called from woocommerce_admin_process_product_object after WooCommerce validates its product-save nonce; edit_post capability is also required.
 		$rate = max( 0, min( 1000000, (float) wc_format_decimal( wp_unslash( AWPM_Security::value( $_POST, '_awpm_rate', '0' ) ) ) ) );
 		$product->update_meta_data( '_awpm_type', $type );
 		$product->update_meta_data( '_awpm_rate', 'percent' === $type ? min( 100, $rate ) : $rate );
