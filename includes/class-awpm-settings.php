@@ -9,8 +9,30 @@ final class AWPM_Settings {
 		$known = get_woocommerce_currencies();
 		return isset( $known[ $currency ] ) ? $currency : 'USD';
 	}
+	/** Keep URL names separate from WooCommerce's stable internal endpoint key. */
+	public static function url_name( $value, $kind ) {
+		$default = 'account_slug' === $kind ? 'affiliate-wpm' : 'awpm_ref';
+		$value = is_string( $value ) ? strtolower( trim( $value ) ) : '';
+		$pattern = 'account_slug' === $kind ? '/^[a-z][a-z0-9-]{0,59}$/' : '/^[a-z][a-z0-9_-]{0,59}$/';
+		$reserved = array( 'action', 'security', 'nonce', '_wpnonce', 'wc-ajax', 'wc-api', 'rest_route', 'key', 'token', 'password', 'access_token', 'order_key', 'pay_for_order', 'wp-admin', 'wp-json', 'wp-login', 'feed', 'embed', 'dashboard', 'orders', 'view-order', 'downloads', 'edit-account', 'edit-address', 'payment-methods', 'add-payment-method', 'delete-payment-method', 'set-default-payment-method', 'lost-password', 'customer-logout', 'order-pay', 'order-received' );
+		if ( class_exists( 'WP' ) ) { $reserved = array_merge( $reserved, ( new WP() )->public_query_vars ); }
+		foreach ( array( 'orders', 'view_order', 'downloads', 'edit_account', 'edit_address', 'payment_methods', 'add_payment_method', 'delete_payment_method', 'set_default_payment_method', 'lost_password', 'customer_logout', 'pay', 'order_received' ) as $endpoint ) { $reserved[] = get_option( 'woocommerce_myaccount_' . $endpoint . '_endpoint', '' ); }
+		foreach ( array( 'woocommerce_checkout_pay_endpoint', 'woocommerce_checkout_order_received_endpoint', 'woocommerce_logout_endpoint' ) as $option ) { $reserved[] = get_option( $option, '' ); }
+		return preg_match( $pattern, $value ) && ! in_array( $value, $reserved, true ) ? $value : $default;
+	}
+	public static function referral_parameter() {
+		return self::url_name( AWPM_Security::value( (array) get_option( 'awpm_settings', array() ), 'referral_parameter', 'awpm_ref' ), 'referral_parameter' );
+	}
+	public static function account_slug() {
+		return self::url_name( AWPM_Security::value( (array) get_option( 'awpm_settings', array() ), 'account_slug', 'affiliate-wpm' ), 'account_slug' );
+	}
+	public static function referral_keys() { return array_values( array_unique( array( self::referral_parameter(), 'awpm_ref' ) ) ); }
+	public static function referral_request_key() {
+		foreach ( self::referral_keys() as $key ) { if ( isset( $_GET[ $key ] ) ) { return $key; } }
+		return '';
+	}
 	public static function defaults() {
-		return array( 'enabled' => 'yes', 'approval_required' => 'no', 'terms_content' => '', 'join_title' => __( 'Turn recommendations into rewards', 'affiliate-wpm' ), 'join_description' => __( 'Join our affiliate program and earn commissions when someone buys through your personal link.', 'affiliate-wpm' ), 'join_button_text' => __( 'Join affiliate program', 'affiliate-wpm' ), 'join_show_rate' => 'no', 'release_mode' => 'completed', 'release_days' => 7, 'commission_type' => 'percent', 'commission_rate' => '10', 'minimum' => '50', 'currency' => self::base_currency(), 'exchange_source' => 'auto', 'exchange_rates' => '', 'cookie_days' => 30, 'attribution' => 'first', 'purchase_policy' => 'multiple', 'payout_mode' => 'manual', 'method_selection' => 'multiple', 'methods' => array( array( 'id' => 'bank', 'name' => 'Bank transfer', 'instructions' => 'Enter the account holder, bank name and account details. Do not provide passwords or card details.', 'active' => 'yes' ) ) );
+		return array( 'enabled' => 'yes', 'approval_required' => 'no', 'terms_content' => '', 'join_title' => __( 'Turn recommendations into rewards', 'affiliate-wpm' ), 'join_description' => __( 'Join our affiliate program and earn commissions when someone buys through your personal link.', 'affiliate-wpm' ), 'join_button_text' => __( 'Join affiliate program', 'affiliate-wpm' ), 'join_show_rate' => 'no', 'join_url_enabled' => 'no', 'join_promotion_enabled' => 'no', 'release_mode' => 'completed', 'release_days' => 7, 'commission_type' => 'percent', 'commission_rate' => '10', 'minimum' => '50', 'currency' => self::base_currency(), 'exchange_source' => 'auto', 'exchange_rates' => '', 'referral_parameter' => 'awpm_ref', 'account_slug' => 'affiliate-wpm', 'cookie_days' => 30, 'attribution' => 'first', 'purchase_policy' => 'multiple', 'payout_mode' => 'manual', 'method_selection' => 'multiple', 'methods' => array( array( 'id' => 'bank', 'name' => 'Bank transfer', 'instructions' => 'Enter the account holder, bank name and account details. Do not provide passwords or card details.', 'active' => 'yes' ) ) );
 	}
 	/** Effective program state; keep the merchant's saved preference intact. */
 	public static function program_enabled() {
@@ -20,6 +42,8 @@ final class AWPM_Settings {
 		$settings = wp_parse_args( get_option( 'awpm_settings', array() ), self::defaults() );
 		// Ignore the former plugin currency override, including older settings backups.
 		$settings['currency'] = self::base_currency();
+		$settings['referral_parameter'] = self::referral_parameter();
+		$settings['account_slug'] = self::account_slug();
 		return null === $key ? $settings : ( $settings[ $key ] ?? null );
 	}
 	/** Canonical content and version shared by display and enrollment validation. */
@@ -31,6 +55,7 @@ final class AWPM_Settings {
 		return '' === $terms ? '' : hash( 'sha256', $terms );
 	}
 	public static function init() {
+		add_action( 'update_option_awpm_settings', array( 'AWPM_Account', 'settings_changed' ), 10, 2 );
 		add_action( 'admin_post_awpm_save_settings', array( __CLASS__, 'save' ) );
 		add_action( 'woocommerce_product_options_general_product_data', array( __CLASS__, 'product_fields' ) );
 		add_action( 'woocommerce_admin_process_product_object', array( __CLASS__, 'save_product' ) );
@@ -46,6 +71,13 @@ final class AWPM_Settings {
 		$input = is_array( $input ) ? $input : array();
 		$defaults = self::defaults();
 		$clean = $defaults;
+		foreach ( array( 'referral_parameter', 'account_slug' ) as $key ) { $clean[ $key ] = self::url_name( AWPM_Security::value( $input, $key, $defaults[ $key ] ), $key ); }
+		if ( function_exists( 'WC' ) && WC()->query ) {
+			foreach ( WC()->query->get_query_vars() as $key => $slug ) {
+				if ( 'affiliate-wpm' === $key ) { continue; }
+				foreach ( array( 'referral_parameter', 'account_slug' ) as $name ) { if ( in_array( $clean[ $name ], array( $key, $slug ), true ) ) { $clean[ $name ] = $defaults[ $name ]; } }
+			}
+		}
 		foreach ( array( 'join_title', 'join_button_text' ) as $key ) {
 			$value = mb_substr( sanitize_text_field( AWPM_Security::value( $input, $key, $defaults[ $key ] ) ), 0, 180 );
 			$clean[ $key ] = '' !== trim( $value ) ? $value : $defaults[ $key ];
@@ -53,7 +85,7 @@ final class AWPM_Settings {
 		$clean['join_description'] = mb_substr( sanitize_textarea_field( AWPM_Security::value( $input, 'join_description', $defaults['join_description'] ) ), 0, 3000 );
 		$clean['terms_content'] = wp_kses_post( mb_substr( AWPM_Security::value( $input, 'terms_content' ), 0, 50000 ) );
 		$clean['enabled'] = 'yes' === AWPM_Security::value( $input, 'enabled' ) ? 'yes' : 'no';
-		foreach ( array( 'join_show_rate' => array( 'yes', 'no' ), 'release_mode' => array( 'completed', 'delay' ), 'exchange_source' => array( 'auto', 'fox', 'curcy', 'manual', 'same' ), 'approval_required' => array( 'yes', 'no' ), 'commission_type' => array( 'percent', 'fixed' ), 'attribution' => array( 'first', 'last' ), 'purchase_policy' => array( 'once', 'multiple' ), 'payout_mode' => array( 'manual', 'disabled' ), 'method_selection' => array( 'single', 'multiple' ) ) as $key => $allowed ) {
+		foreach ( array( 'join_url_enabled' => array( 'yes', 'no' ), 'join_promotion_enabled' => array( 'yes', 'no' ), 'join_show_rate' => array( 'yes', 'no' ), 'release_mode' => array( 'completed', 'delay' ), 'exchange_source' => array( 'auto', 'fox', 'curcy', 'manual', 'same' ), 'approval_required' => array( 'yes', 'no' ), 'commission_type' => array( 'percent', 'fixed' ), 'attribution' => array( 'first', 'last' ), 'purchase_policy' => array( 'once', 'multiple' ), 'payout_mode' => array( 'manual', 'disabled' ), 'method_selection' => array( 'single', 'multiple' ) ) as $key => $allowed ) {
 			$clean[ $key ] = in_array( $input[ $key ] ?? '', $allowed, true ) ? $input[ $key ] : $defaults[ $key ];
 		}
 		$clean['commission_rate'] = wc_format_decimal( max( 0, min( 1000000, (float) wc_format_decimal( AWPM_Security::value( $input, 'commission_rate', '10' ) ) ) ), 6 );

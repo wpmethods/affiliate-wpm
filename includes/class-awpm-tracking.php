@@ -39,8 +39,9 @@ final class AWPM_Tracking {
 		return self::active( (int) $parts[0] ) ? (int) $parts[0] : 0;
 	}
 	public static function capture() {
-		if ( ! AWPM_Settings::program_enabled() || ! isset( $_GET['awpm_ref'] ) || ! is_scalar( $_GET['awpm_ref'] ) || is_admin() || headers_sent() ) { return; }
-		$token = sanitize_text_field( wp_unslash( $_GET['awpm_ref'] ) );
+		$key = AWPM_Settings::referral_request_key();
+		if ( ! AWPM_Settings::program_enabled() || ! $key || ! is_scalar( $_GET[ $key ] ) || is_admin() || headers_sent() ) { return; }
+		$token = sanitize_text_field( wp_unslash( $_GET[ $key ] ) );
 		if ( ! preg_match( '/^[a-z0-9]{32}$/', $token ) ) { return; }
 		$users = get_users( array( 'meta_key' => '_awpm_token', 'meta_value' => $token, 'number' => 1, 'fields' => 'ID' ) );
 		$id = $users ? (int) $users[0] : 0;
@@ -89,6 +90,8 @@ final class AWPM_Tracking {
 		$wpdb->delete( AWPM_Store::table( 'clicks' ), array( 'affiliate_id' => $customer_id ) );
 	}
 	public static function attach( $order ) {
+		// Store API can attribute a draft before submission; sync still waits for a real order.
+		if ( AWPM_Commissions::incomplete_order( $order ) && ! $order->has_status( 'checkout-draft' ) ) { return; }
 		if ( ! AWPM_Settings::program_enabled() || $order->get_meta( '_awpm_affiliate' ) ) { return; }
 		$id = self::referral();
 		$user = $id ? get_userdata( $id ) : false;

@@ -2,8 +2,28 @@
 defined( 'ABSPATH' ) || exit;
 
 final class AWPM_Account {
-	public static function endpoint() { add_rewrite_endpoint( 'affiliate-wpm', EP_ROOT | EP_PAGES ); }
+	public static function endpoint() {
+		global $wp_rewrite;
+		foreach ( array_unique( array( 'affiliate-wpm', AWPM_Settings::account_slug() ) ) as $slug ) {
+			if ( ! in_array( $slug, array_column( $wp_rewrite->endpoints, 1 ), true ) ) { add_rewrite_endpoint( $slug, EP_ROOT | EP_PAGES ); }
+		}
+	}
+	public static function settings_changed( $old, $new ) {
+		$previous = AWPM_Settings::url_name( AWPM_Security::value( (array) $old, 'account_slug', 'affiliate-wpm' ), 'account_slug' );
+		$current = AWPM_Settings::url_name( AWPM_Security::value( (array) $new, 'account_slug', 'affiliate-wpm' ), 'account_slug' );
+		if ( $previous === $current ) { return; }
+		global $wp_rewrite;
+		if ( 'affiliate-wpm' !== $previous ) { $wp_rewrite->endpoints = array_values( array_filter( $wp_rewrite->endpoints, function ( $endpoint ) use ( $previous ) { return $endpoint[1] !== $previous; } ) ); }
+		self::endpoint();
+		flush_rewrite_rules( false );
+	}
+	/** Normalize the default URL alias so WooCommerce conditionals also recognize it. */
+	public static function parse_request( $request ) {
+		$slug = AWPM_Settings::account_slug();
+		if ( 'affiliate-wpm' !== $slug && isset( $request->query_vars['affiliate-wpm'] ) && ! isset( $request->query_vars[ $slug ] ) ) { $request->query_vars[ $slug ] = $request->query_vars['affiliate-wpm']; }
+	}
 	public static function init() {
+		add_action( 'parse_request', array( __CLASS__, 'parse_request' ), 1 );
 		add_filter( 'woocommerce_get_query_vars', array( __CLASS__, 'query_vars' ) );
 		add_action( 'init', array( __CLASS__, 'endpoint' ) );
 		add_filter( 'woocommerce_account_menu_items', array( __CLASS__, 'menu' ) );
@@ -24,7 +44,7 @@ final class AWPM_Account {
 	}
 	public static function query_vars( $vars ) {
 		// WooCommerce conditionals, endpoint titles and URLs use its own registry.
-		$vars['affiliate-wpm'] = 'affiliate-wpm';
+		$vars['affiliate-wpm'] = AWPM_Settings::account_slug();
 		return $vars;
 	}
 	public static function menu( $items ) {
@@ -44,7 +64,7 @@ final class AWPM_Account {
 			$id = get_current_user_id();
 			$action = sanitize_key( wp_unslash( $_POST['awpm_action'] ) );
 			if ( 'join' === $action ) {
-				$result = AWPM_Affiliates::join( $id, 'yes' === AWPM_Security::value( $_POST, 'awpm_accept_terms' ), wp_unslash( AWPM_Security::value( $_POST, 'awpm_terms_version' ) ) );
+				$result = AWPM_Affiliates::join( $id, 'yes' === AWPM_Security::value( $_POST, 'awpm_accept_terms' ), wp_unslash( AWPM_Security::value( $_POST, 'awpm_terms_version' ) ), wp_unslash( AWPM_Security::rows( $_POST, 'awpm_join' ) ) );
 				$messages = array( 'approved' => __( 'Your affiliate account is ready. Start sharing your referral link!', 'affiliate-wpm' ), 'pending' => __( 'Your affiliate application is awaiting administrator approval.', 'affiliate-wpm' ), 'rejected' => __( 'Your affiliate application was rejected. Please contact the store.', 'affiliate-wpm' ) );
 				wc_add_notice( is_wp_error( $result ) ? $result->get_error_message() : ( $messages[ $result ] ?? '' ), is_wp_error( $result ) || 'rejected' === $result ? 'error' : 'success' );
 			} elseif ( 'withdraw' === $action ) {
@@ -76,6 +96,8 @@ final class AWPM_Account {
 			}
 			if ( AWPM_Settings::program_enabled() && 'yes' !== get_user_meta( $id, '_awpm_blocked', true ) ) {
 				echo '<form method="post">'; wp_nonce_field( 'awpm_account' );
+				if ( 'yes' === AWPM_Settings::get( 'join_url_enabled' ) ) { echo '<div class="awpm-field"><label for="awpm-join-website">' . esc_html__( 'Website / Promote URL', 'affiliate-wpm' ) . '</label><input type="url" id="awpm-join-website" name="awpm_join[website]" maxlength="2048" placeholder="https://example.com/your-profile" autocomplete="url" required><p class="awpm-muted">' . esc_html__( 'Your website, blog, channel or social profile.', 'affiliate-wpm' ) . '</p></div>'; }
+				if ( 'yes' === AWPM_Settings::get( 'join_promotion_enabled' ) ) { echo '<div class="awpm-field"><label for="awpm-join-promotion">' . esc_html__( 'How will you promote us?', 'affiliate-wpm' ) . '</label><textarea id="awpm-join-promotion" name="awpm_join[promotion]" maxlength="3000" rows="4" style="width:100%" required></textarea><p class="awpm-muted">' . esc_html__( 'Tell us about your audience and how you plan to share our products.', 'affiliate-wpm' ) . '</p></div>'; }
 				$terms = AWPM_Settings::terms();
 				if ( '' !== $terms ) {
 					echo '<section class="awpm-join-terms" aria-labelledby="awpm-terms-title"><h3 id="awpm-terms-title">' . esc_html__( 'Terms & Conditions', 'affiliate-wpm' ) . '</h3><div class="awpm-terms-content" tabindex="0" role="region" aria-labelledby="awpm-terms-title">' . wp_kses_post( wpautop( $terms ) ) . '</div><label class="awpm-terms-accept"><input type="checkbox" name="awpm_accept_terms" value="yes" required><span>' . esc_html__( 'I have read and agree to the affiliate Terms & Conditions.', 'affiliate-wpm' ) . '</span></label><input type="hidden" name="awpm_terms_version" value="' . esc_attr( AWPM_Settings::terms_version() ) . '"></section>';
@@ -104,7 +126,7 @@ final class AWPM_Account {
 		$stats = AWPM_Store::referral_stats( $id );
 		echo '</div><div class="awpm-referral-metrics">' . AWPM_UI::metric( __( 'Referral clicks', 'affiliate-wpm' ), number_format_i18n( $stats['clicks'] ), 'click' ) . AWPM_UI::metric( __( 'Registered customers', 'affiliate-wpm' ), number_format_i18n( $stats['customers'] ), 'user' ) . '</div><details class="awpm-stat-help"><summary>' . esc_html__( 'How your activity is counted', 'affiliate-wpm' ) . '</summary><p>' . esc_html__( 'Consecutive clicks on the same referral count once per browser within 30 minutes. Registered customers are new accounts created through your referral cookie. These statistics start from when tracking was enabled.', 'affiliate-wpm' ) . '</p></details><div class="awpm-grid awpm-account-tools"><section class="awpm-card awpm-link-card" id="awpm-sharing"><div class="awpm-card-heading"><span class="awpm-icon-tile">' . AWPM_UI::icon( 'link' ) . '</span><div><h3>' . esc_html__( 'Your referral link', 'affiliate-wpm' ) . '</h3><p>' . esc_html__( 'One link to share your favorite store.', 'affiliate-wpm' ) . '</p></div></div>';
 		if ( $active ) {
-			$link = add_query_arg( 'awpm_ref', AWPM_Tracking::token( $id ), home_url( '/' ) );
+			$link = add_query_arg( AWPM_Settings::referral_parameter(), AWPM_Tracking::token( $id ), home_url( '/' ) );
 			echo '<label for="awpm-ref-link" class="screen-reader-text">' . esc_html__( 'Referral link', 'affiliate-wpm' ) . '</label><div class="awpm-copy"><input id="awpm-ref-link" readonly value="' . esc_attr( $link ) . '"><button type="button" class="button awpm-primary" data-awpm-copy data-copied="' . esc_attr__( 'Copied!', 'affiliate-wpm' ) . '">' . esc_html__( 'Copy', 'affiliate-wpm' ) . '</button></div><p class="awpm-muted awpm-link-hint">' . sprintf( esc_html__( 'Referral cookie: %d days. Self-referrals do not earn commission.', 'affiliate-wpm' ), (int) AWPM_Settings::get( 'cookie_days' ) ) . '</p><p class="awpm-copy-feedback" role="status" aria-live="polite"></p>';
 			AWPM_Sharing::generator();
 			self::best_sellers( $id );
@@ -274,7 +296,7 @@ final class AWPM_Account {
 	public static function privacy() {
 		if ( function_exists( 'wp_add_privacy_policy_content' ) ) {
 			wp_add_privacy_policy_content( 'Affiliate WPM', '<p>' . esc_html__( 'We count referral clicks in daily aggregate counters, without visitor IP addresses or browser fingerprints. A second signed cookie suppresses repeated consecutive clicks for 30 minutes. New customer account registrations may be linked to the referring affiliate while a valid referral cookie is present. Affiliates see the customer first name and masked email and phone details; full contact details, surnames and other account details are not shown. Registration attribution and affiliate counters are removed through WordPress personal-data erasure or when the associated account is deleted.', 'affiliate-wpm' ) . '</p>' );
-			wp_add_privacy_policy_content( 'Affiliate WPM', '<p>' . esc_html__( 'Our affiliate program uses a signed referral cookie to attribute purchases. The cookie stores an affiliate identifier and expiry time. We store affiliate enrollment, order-linked commissions, and withdrawal requests with payment destination details in our WordPress database. Authorized store managers can access these records to process payouts. Referral cookies expire after the configured duration. Financial records are retained until the store administrator removes them according to the store retention policy. We do not send this information to an external payout provider automatically.', 'affiliate-wpm' ) . '</p>' );
+			wp_add_privacy_policy_content( 'Affiliate WPM', '<p>' . esc_html__( 'Our affiliate program uses a signed referral cookie to attribute purchases. The cookie stores an affiliate identifier and expiry time. Affiliate applications may include a website/profile URL and promotion plan when these fields are enabled for administrator review. We store affiliate enrollment, order-linked commissions, and withdrawal requests with payment destination details in our WordPress database. Authorized store managers can access these records to process payouts. Referral cookies expire after the configured duration. Financial records are retained until the store administrator removes them according to the store retention policy. We do not send this information to an external payout provider automatically.', 'affiliate-wpm' ) . '</p>' );
 		}
 	}
 	public static function exporter( $exporters ) {
@@ -292,6 +314,11 @@ final class AWPM_Account {
 			$data[] = array( 'group_id' => 'affiliate-wpm', 'group_label' => 'Affiliate WPM', 'item_id' => 'awpm-profile-' . $user->ID, 'data' => array( array( 'name' => __( 'Enrollment', 'affiliate-wpm' ), 'value' => get_user_meta( $user->ID, '_awpm_enrolled', true ) ), array( 'name' => __( 'Referral token', 'affiliate-wpm' ), 'value' => get_user_meta( $user->ID, '_awpm_token', true ) ), array( 'name' => __( 'Blocked', 'affiliate-wpm' ), 'value' => get_user_meta( $user->ID, '_awpm_blocked', true ) ) ) );
 		}
 		$customers = AWPM_Store::table( 'customers' );
+		$application = get_user_meta( $user->ID, '_awpm_application', true );
+		if ( 1 === $page && is_array( $application ) ) {
+			$values = array(); foreach ( array( 'website', 'promotion', 'submitted_at' ) as $key ) { $values[] = array( 'name' => $key, 'value' => AWPM_Security::value( $application, $key ) ); }
+			$data[] = array( 'group_id' => 'affiliate-wpm', 'group_label' => 'Affiliate WPM', 'item_id' => 'awpm-application-' . $user->ID, 'data' => $values );
+		}
 		$referrals = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM $customers WHERE customer_id=%d OR affiliate_id=%d ORDER BY customer_id ASC LIMIT 50 OFFSET %d", $user->ID, $user->ID, ( $page - 1 ) * 50 ), ARRAY_A );
 		if ( 1 === $page && 'none' !== AWPM_Affiliates::status( $user->ID ) ) {
 			$data[] = array( 'group_id' => 'affiliate-wpm', 'group_label' => 'Affiliate WPM', 'item_id' => 'awpm-approval-' . $user->ID, 'data' => array( array( 'name' => __( 'Affiliate approval status', 'affiliate-wpm' ), 'value' => AWPM_Affiliates::status( $user->ID ) ) ) );
@@ -329,7 +356,7 @@ final class AWPM_Account {
 		$user = get_user_by( 'email', $email );
 		$result = array( 'items_removed' => false, 'items_retained' => false, 'messages' => array(), 'done' => true );
 		if ( ! $user ) { return $result; }
-		foreach ( array( '_awpm_token', '_awpm_enrolled', '_awpm_blocked', '_awpm_approval' ) as $key ) { $result['items_removed'] = delete_user_meta( $user->ID, $key ) || $result['items_removed']; }
+		foreach ( array( '_awpm_token', '_awpm_enrolled', '_awpm_blocked', '_awpm_approval', '_awpm_application' ) as $key ) { $result['items_removed'] = delete_user_meta( $user->ID, $key ) || $result['items_removed']; }
 		$customers = AWPM_Store::table( 'customers' );
 		$removed = $wpdb->query( $wpdb->prepare( "DELETE FROM $customers WHERE customer_id=%d OR affiliate_id=%d", $user->ID, $user->ID ) );
 		$result['items_removed'] = $removed > 0 || $result['items_removed'];

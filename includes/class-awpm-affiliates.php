@@ -7,13 +7,15 @@ final class AWPM_Affiliates {
 		$status = get_user_meta( $id, '_awpm_approval', true );
 		return in_array( $status, array( 'pending', 'approved', 'rejected' ), true ) ? $status : 'approved';
 	}
-	public static function join( $id, $accepted = false, $terms_version = '' ) {
+	public static function join( $id, $accepted = false, $terms_version = '', $application = array() ) {
 		if ( ! $id || $id !== get_current_user_id() || ! get_userdata( $id ) ) { return new WP_Error( 'access', __( 'Please sign in to join.', 'affiliate-wpm' ) ); }
-		return AWPM_Store::locked( $id, function () use ( $id, $accepted, $terms_version ) {
+		return AWPM_Store::locked( $id, function () use ( $id, $accepted, $terms_version, $application ) {
 			wp_cache_delete( $id, 'user_meta' );
 			if ( ! AWPM_Settings::program_enabled() || 'yes' === get_user_meta( $id, '_awpm_blocked', true ) ) { return new WP_Error( 'unavailable', __( 'Affiliate enrollment is currently unavailable for your account.', 'affiliate-wpm' ) ); }
 			$status = self::status( $id );
 			if ( 'none' !== $status ) { return $status; }
+			$application = self::clean_application( $application );
+			if ( is_wp_error( $application ) ) { return $application; }
 			$version = AWPM_Settings::terms_version();
 			if ( '' !== $version ) {
 				if ( true !== $accepted ) { return new WP_Error( 'terms_required', __( 'Please read and accept the affiliate Terms & Conditions before joining.', 'affiliate-wpm' ) ); }
@@ -22,6 +24,11 @@ final class AWPM_Affiliates {
 				update_user_meta( $id, '_awpm_terms_version', $version );
 				update_user_meta( $id, '_awpm_terms_accepted_at', $accepted_at );
 				if ( get_user_meta( $id, '_awpm_terms_version', true ) !== $version || get_user_meta( $id, '_awpm_terms_accepted_at', true ) !== $accepted_at ) { return new WP_Error( 'save', __( 'Your terms acceptance could not be saved. Please try again.', 'affiliate-wpm' ) ); }
+			}
+			if ( 'yes' === AWPM_Settings::get( 'join_url_enabled' ) || 'yes' === AWPM_Settings::get( 'join_promotion_enabled' ) ) {
+				$application['submitted_at'] = current_time( 'mysql', true );
+				update_user_meta( $id, '_awpm_application', $application );
+				if ( get_user_meta( $id, '_awpm_application', true ) !== $application ) { return new WP_Error( 'save', __( 'Your application could not be saved. Please try again.', 'affiliate-wpm' ) ); }
 			}
 			$status = 'yes' === AWPM_Settings::get( 'approval_required' ) ? 'pending' : 'approved';
 			update_user_meta( $id, '_awpm_approval', $status );
@@ -32,6 +39,22 @@ final class AWPM_Affiliates {
 			AWPM_Emails::queue( 'joined_affiliate', $id, array( 'status' => $status ) );
 			return $status;
 		} );
+	}
+	public static function clean_application( $input ) {
+		$input = is_array( $input ) ? $input : array(); $clean = array( 'website' => '', 'promotion' => '' );
+		foreach ( array( 'website' => 'join_url_enabled', 'promotion' => 'join_promotion_enabled' ) as $key => $setting ) {
+			if ( 'yes' !== AWPM_Settings::get( $setting ) ) { continue; }
+			if ( isset( $input[ $key ] ) && ! is_scalar( $input[ $key ] ) ) { return new WP_Error( 'application', __( 'Please enter valid application details.', 'affiliate-wpm' ) ); }
+			$value = trim( AWPM_Security::value( $input, $key ) );
+			if ( mb_strlen( $value ) > ( 'website' === $key ? 2048 : 3000 ) ) { return new WP_Error( 'application', __( 'Your application details are too long. Please shorten them.', 'affiliate-wpm' ) ); }
+			if ( 'website' === $key && '' !== $value ) {
+				$url = esc_url_raw( $value, array( 'http', 'https' ) ); $parts = wp_parse_url( $url );
+				if ( ! preg_match( '~^https?://~i', $value ) || ! $url || ! is_array( $parts ) || empty( $parts['host'] ) || ! empty( $parts['user'] ) || ! empty( $parts['pass'] ) ) { return new WP_Error( 'application_url', __( 'Enter a complete website or profile URL starting with https:// or http://.', 'affiliate-wpm' ) ); }
+				$clean[ $key ] = $url;
+			} elseif ( 'promotion' === $key ) { $clean[ $key ] = sanitize_textarea_field( $value ); }
+			if ( '' === trim( $clean[ $key ] ) ) { return new WP_Error( 'application_required', 'website' === $key ? __( 'Please enter your website or promotion URL.', 'affiliate-wpm' ) : __( 'Please describe how you will promote us.', 'affiliate-wpm' ) ); }
+		}
+		return $clean;
 	}
 	public static function review( $id, $status ) {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { return new WP_Error( 'access', __( 'Access denied.', 'affiliate-wpm' ) ); }

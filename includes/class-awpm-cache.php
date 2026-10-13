@@ -11,14 +11,14 @@ final class AWPM_Cache {
 		add_filter( 'rocket_delay_js_exclusions', array( __CLASS__, 'scripts' ) );
 	}
 	public static function early() {
-		if ( isset( $_GET['awpm_ref'] ) ) {
+		if ( '' !== AWPM_Settings::referral_request_key() ) {
 			if ( ! defined( 'DONOTCACHEPAGE' ) ) { define( 'DONOTCACHEPAGE', true ); }
 			if ( did_action( 'plugins_loaded' ) ) { self::no_cache( 'Affiliate WPM referral landing' ); }
 		}
 	}
 	public static function protect() {
 		if ( is_admin() ) { return; }
-		if ( isset( $_GET['awpm_ref'] ) ) { self::no_cache( 'Affiliate WPM referral landing' ); return; }
+		if ( '' !== AWPM_Settings::referral_request_key() ) { self::no_cache( 'Affiliate WPM referral landing' ); return; }
 		if ( function_exists( 'is_account_page' ) && ( is_account_page() || is_cart() || is_checkout() ) ) { self::no_cache( 'Affiliate WPM account or checkout' ); return; }
 		if ( function_exists( 'is_product' ) && is_product() && is_user_logged_in() && 'yes' === AWPM_Sharing::get( 'enabled' ) && 'yes' === AWPM_Sharing::get( 'product_section' ) ) { self::no_cache( 'Affiliate WPM personalized product sharing' ); }
 	}

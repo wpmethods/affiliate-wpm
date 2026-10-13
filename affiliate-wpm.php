@@ -41,6 +41,7 @@ require_once AWPM_PATH . 'includes/class-awpm-account.php';
 require_once AWPM_PATH . 'includes/class-awpm-sharing.php';
 require_once AWPM_PATH . 'includes/class-awpm-admin.php';
 require_once AWPM_PATH . 'includes/class-awpm-tools.php';
+require_once AWPM_PATH . 'includes/class-awpm-checkout.php';
 register_activation_hook( __FILE__, function () {
 	AWPM_Store::install();
 	AWPM_Account::endpoint();
@@ -67,6 +68,7 @@ add_action( 'plugins_loaded', function () {
 	AWPM_Emails::init();
 	AWPM_Design::init();
 	AWPM_Tracking::init();
+	AWPM_Checkout::init();
 	AWPM_Commissions::init();
 	AWPM_Account::init();
 	AWPM_Sharing::init();

@@ -49,7 +49,7 @@ final class AWPM_Sharing {
 			return new WP_Error( 'url', __( 'Use a product or page URL from this store only.', 'affiliate-wpm' ) );
 		}
 		if ( ! self::public_url( $url, $parts ) ) { return new WP_Error( 'private_url', __( 'Use a public product or page link. Account, checkout, admin and action links cannot be shared.', 'affiliate-wpm' ) ); }
-		return add_query_arg( 'awpm_ref', AWPM_Tracking::token( $id ), esc_url_raw( $url, array( 'http', 'https' ) ) );
+		return add_query_arg( AWPM_Settings::referral_parameter(), AWPM_Tracking::token( $id ), remove_query_arg( AWPM_Settings::referral_keys(), esc_url_raw( $url, array( 'http', 'https' ) ) ) );
 	}
 	private static function public_url( $url, $parts ) {
 		$path = strtolower( rawurldecode( rawurldecode( $parts['path'] ?? '/' ) ) );

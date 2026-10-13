@@ -3,6 +3,8 @@ defined( 'ABSPATH' ) || exit;
 
 final class AWPM_Commissions {
 	public static function init() {
+		add_action( 'woocommerce_before_delete_order', array( __CLASS__, 'placeholder_removed' ), 10, 2 );
+		add_action( 'woocommerce_trash_order', array( __CLASS__, 'placeholder_removed' ) );
 		add_action( 'awpm_release_order', array( __CLASS__, 'sync' ) );
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'sync' ) );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( __CLASS__, 'sync' ) );
@@ -97,12 +99,39 @@ final class AWPM_Commissions {
 		$precision = is_array( $fx ) ? max( 0, min( 6, (int) ( $fx['precision'] ?? 2 ) ) ) : AWPM_Currency::precision( $order->get_meta( '_awpm_currency' ) ?: $order->get_currency() );
 		return round( $amount, $precision );
 	}
+	/** Abandoned checkout placeholders are not submitted customer orders. */
+	public static function incomplete_order( $order ) {
+		if ( $order->has_status( array( 'incomplete', 'checkout-draft', 'auto-draft' ) ) || (int) $order->get_meta( '_cs_io_converted_to' ) > 0 ) { return true; }
+		if ( ! $order->has_status( array( 'pending', 'trash' ) ) ) { return false; }
+		foreach ( array( '_incomplete_created', '_incomplete_session_id', '_incomplete_source', '_cs_io_token_hash' ) as $key ) { if ( $order->meta_exists( $key ) ) { return true; } }
+		return false;
+	}
+	public static function placeholder_removed( $id, $order = null ) {
+		$order = $order instanceof WC_Order ? $order : wc_get_order( $id );
+		if ( $order && ! $order instanceof WC_Order_Refund && self::incomplete_order( $order ) ) { self::sync( $id ); }
+	}
+	/** Remove only erroneous pending entries that have never entered a payout. */
+	private static function discard_placeholder_row( $row ) {
+		global $wpdb;
+		if ( $row && 'pending' === $row->status && 0 === (int) $row->payout_id && 0.0 === (float) $row->paid_amount ) {
+			AWPM_Store::must( $wpdb->delete( AWPM_Store::table( 'commissions' ), array( 'id' => $row->id, 'status' => 'pending', 'payout_id' => 0, 'paid_amount' => 0 ) ) );
+		}
+	}
 	public static function sync( $order_or_id, $only_missing = false ) {
 		global $wpdb;
 		$only_missing = true === $only_missing;
 		$id = is_object( $order_or_id ) ? $order_or_id->get_id() : absint( $order_or_id );
 		$order = wc_get_order( $id );
 		if ( ! $order || $order instanceof WC_Order_Refund ) { return; }
+		if ( self::incomplete_order( $order ) ) {
+			$table = AWPM_Store::table( 'commissions' );
+			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE order_id=%d", $id ) );
+			if ( ! $row ) { return; }
+			return AWPM_Store::locked( (int) $row->affiliate_id, function () use ( $wpdb, $id, $table ) {
+				$current = wc_get_order( $id );
+				if ( $current && self::incomplete_order( $current ) ) { self::discard_placeholder_row( $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE order_id=%d", $id ) ) ); }
+			} );
+		}
 		$affiliate = (int) $order->get_meta( '_awpm_affiliate' );
 		if ( ! $affiliate || ! $order->get_meta( '_awpm_rates' ) ) { return; }
 		$currency = $order->get_meta( '_awpm_currency' );
@@ -120,6 +149,8 @@ final class AWPM_Commissions {
 			$order = wc_get_order( $id );
 			$table = AWPM_Store::table( 'commissions' );
 			$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM $table WHERE order_id=%d", $id ) );
+			if ( ! $order ) { return; }
+			if ( self::incomplete_order( $order ) ) { self::discard_placeholder_row( $row ); return; }
 			if ( $only_missing && $row ) { return new WP_Error( 'exists', __( 'This order already has a commission record. Its financial history was left unchanged.', 'affiliate-wpm' ) ); }
 			// Existing same-currency records keep their original calculation semantics.
 			$legacy = $row && ! $order->get_meta( '_awpm_calculation_version' ) && $currency === $order->get_currency();
