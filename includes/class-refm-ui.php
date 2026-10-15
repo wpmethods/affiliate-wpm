@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-final class AFFM_UI {
+final class REFM_UI {
 	/** Allow only the markup used by the plugin's rendered components. */
 	public static function allowed_html() {
 		$allowed = wp_kses_allowed_html( 'post' );
@@ -9,8 +9,8 @@ final class AFFM_UI {
 		foreach ( array( 'path', 'circle', 'rect', 'line', 'polyline', 'polygon', 'g' ) as $tag ) {
 			$allowed[ $tag ] = array_fill_keys( array( 'd', 'fill', 'stroke', 'stroke-width', 'cx', 'cy', 'r', 'x', 'y', 'x1', 'x2', 'y1', 'y2', 'width', 'height', 'rx', 'ry', 'points', 'transform' ), true );
 		}
-		$allowed['input'] = array_fill_keys( array( 'type', 'name', 'id', 'class', 'value', 'min', 'max', 'step', 'placeholder', 'readonly', 'disabled', 'required', 'autocomplete', 'aria-label', 'data-affm-reset' ), true );
-		$allowed['button'] = array_fill_keys( array( 'type', 'class', 'title', 'aria-label', 'data-affm-share', 'data-affm-link' ), true );
+		$allowed['input'] = array_fill_keys( array( 'type', 'name', 'id', 'class', 'value', 'min', 'max', 'step', 'placeholder', 'readonly', 'disabled', 'required', 'autocomplete', 'aria-label', 'data-refm-reset' ), true );
+		$allowed['button'] = array_fill_keys( array( 'type', 'class', 'title', 'aria-label', 'data-refm-share', 'data-refm-link' ), true );
 		return $allowed;
 	}
 	public static function icon( $name ) {
@@ -39,19 +39,19 @@ final class AFFM_UI {
 			'click' => 'M5 3l4 17 4-7 7-4z',
 			'shield' => 'M12 2l8 4v6c0 5-8 10-8 10S4 17 4 12V6z M8 12l3 3 5-6',
 		);
-		return '<svg class="affm-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="' . esc_attr( $paths[ $name ] ?? $paths['overview'] ) . '"></path></svg>';
+		return '<svg class="refm-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="' . esc_attr( $paths[ $name ] ?? $paths['overview'] ) . '"></path></svg>';
 	}
 	public static function metric( $label, $value, $icon, $note = '' ) {
 		$tones = array( 'clock' => 'amber', 'wallet' => 'green', 'payouts' => 'green', 'send' => 'blue', 'sharing' => 'blue', 'award' => 'purple', 'check' => 'purple', 'click' => 'slate', 'user' => 'purple', 'affiliates' => 'purple' );
-		return '<div class="affm-metric affm-metric-tone-' . esc_attr( $tones[ $icon ] ?? 'blue' ) . '"><div class="affm-metric-top"><span>' . esc_html( $label ) . '</span><span class="affm-icon-tile">' . wp_kses( self::icon( $icon ), AFFM_UI::allowed_html() ) . '</span></div><strong>' . wp_kses_post( $value ) . '</strong>' . ( $note ? '<small>' . esc_html( $note ) . '</small>' : '' ) . '</div>';
+		return '<div class="refm-metric refm-metric-tone-' . esc_attr( $tones[ $icon ] ?? 'blue' ) . '"><div class="refm-metric-top"><span>' . esc_html( $label ) . '</span><span class="refm-icon-tile">' . wp_kses( self::icon( $icon ), REFM_UI::allowed_html() ) . '</span></div><strong>' . wp_kses_post( $value ) . '</strong>' . ( $note ? '<small>' . esc_html( $note ) . '</small>' : '' ) . '</div>';
 	}
 	/** Scoped feedback avoids WordPress moving native .notice elements into our header. */
 	public static function toast( $message, $error = false ) {
 		if ( ! is_scalar( $message ) || '' === trim( (string) $message ) ) { return; }
 		$error = (bool) $error;
-		echo '<div class="affm-toast affm-toast-' . ( $error ? 'error' : 'success' ) . '" role="' . ( $error ? 'alert' : 'status' ) . '" aria-live="' . ( $error ? 'assertive' : 'polite' ) . '" aria-atomic="true" data-affm-toast data-autodismiss="' . ( $error ? 'no' : 'yes' ) . '"><span class="affm-toast-icon">' . wp_kses( self::icon( $error ? 'alert' : 'check' ), AFFM_UI::allowed_html() ) . '</span><div class="affm-toast-content"><strong>' . esc_html( $error ? __( 'Action needs attention', 'affmint' ) : __( 'Action completed', 'affmint' ) ) . '</strong><p>' . esc_html( $message ) . '</p></div><button type="button" class="affm-toast-dismiss affm-primary" aria-label="' . esc_attr__( 'Dismiss notification', 'affmint' ) . '">' . wp_kses( self::icon( 'close' ), AFFM_UI::allowed_html() ) . '</button></div>';
+		echo '<div class="refm-toast refm-toast-' . ( $error ? 'error' : 'success' ) . '" role="' . ( $error ? 'alert' : 'status' ) . '" aria-live="' . ( $error ? 'assertive' : 'polite' ) . '" aria-atomic="true" data-refm-toast data-autodismiss="' . ( $error ? 'no' : 'yes' ) . '"><span class="refm-toast-icon">' . wp_kses( self::icon( $error ? 'alert' : 'check' ), REFM_UI::allowed_html() ) . '</span><div class="refm-toast-content"><strong>' . esc_html( $error ? __( 'Action needs attention', 'refmora' ) : __( 'Action completed', 'refmora' ) ) . '</strong><p>' . esc_html( $message ) . '</p></div><button type="button" class="refm-toast-dismiss refm-primary" aria-label="' . esc_attr__( 'Dismiss notification', 'refmora' ) . '">' . wp_kses( self::icon( 'close' ), REFM_UI::allowed_html() ) . '</button></div>';
 	}
 	public static function footer( $label, $form_id = '' ) {
-		echo '<div class="affm-save-bar"><span class="affm-save-state" role="status" aria-live="polite">' . esc_html__( 'Changes apply after saving.', 'affmint' ) . '</span><button type="submit"' . ( $form_id ? ' form="' . esc_attr( $form_id ) . '"' : '' ) . ' class="button button-primary affm-primary">' . wp_kses( self::icon( 'check' ), AFFM_UI::allowed_html() ) . esc_html( $label ) . '</button></div>';
+		echo '<div class="refm-save-bar"><span class="refm-save-state" role="status" aria-live="polite">' . esc_html__( 'Changes apply after saving.', 'refmora' ) . '</span><button type="submit"' . ( $form_id ? ' form="' . esc_attr( $form_id ) . '"' : '' ) . ' class="button button-primary refm-primary">' . wp_kses( self::icon( 'check' ), REFM_UI::allowed_html() ) . esc_html( $label ) . '</button></div>';
 	}
 }

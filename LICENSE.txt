@@ -1,4 +1,4 @@
-AffMint
+Refmora
 Copyright (C) WP Methods
 Licensed under GPL version 2 or (at your option) any later version.
 

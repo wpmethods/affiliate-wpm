@@ -1,7 +1,7 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-final class AFFM_Emails {
+final class REFM_Emails {
 	private static $queue = array();
 	public static function definitions() {
 		return array(
@@ -17,29 +17,29 @@ final class AFFM_Emails {
 		);
 	}
 	public static function get() {
-		$saved = get_option( 'affm_emails', array() );
+		$saved = get_option( 'refm_emails', array() );
 		$config = array( 'admin_email' => get_option( 'admin_email' ), 'from_email' => get_option( 'admin_email' ), 'from_name' => get_bloginfo( 'name' ), 'templates' => array() );
 		$config = wp_parse_args( $saved, $config );
 		foreach ( self::definitions() as $key => $definition ) { $config['templates'][ $key ] = wp_parse_args( $saved['templates'][ $key ] ?? array(), array( 'enabled' => 'yes', 'subject' => $definition['subject'], 'body' => $definition['body'] ) ); }
 		return $config;
 	}
-	public static function init() { add_action( 'admin_post_affm_save_emails', array( __CLASS__, 'save' ) ); }
+	public static function init() { add_action( 'admin_post_refm_save_emails', array( __CLASS__, 'save' ) ); }
 	public static function clean( $input ) {
 		$input = is_array( $input ) ? $input : array();
-		$config = array( 'admin_email' => '', 'from_email' => '', 'from_name' => substr( sanitize_text_field( AFFM_Security::value( $input, 'from_name', get_bloginfo( 'name' ) ) ), 0, 120 ), 'templates' => array() );
-		foreach ( array( 'admin_email', 'from_email' ) as $key ) { $email = sanitize_email( AFFM_Security::value( $input, $key ) ); $config[ $key ] = is_email( $email ) ? $email : get_option( 'admin_email' ); }
+		$config = array( 'admin_email' => '', 'from_email' => '', 'from_name' => substr( sanitize_text_field( REFM_Security::value( $input, 'from_name', get_bloginfo( 'name' ) ) ), 0, 120 ), 'templates' => array() );
+		foreach ( array( 'admin_email', 'from_email' ) as $key ) { $email = sanitize_email( REFM_Security::value( $input, $key ) ); $config[ $key ] = is_email( $email ) ? $email : get_option( 'admin_email' ); }
 		foreach ( self::definitions() as $key => $definition ) {
-			$row = AFFM_Security::rows( AFFM_Security::rows( $input, 'templates' ), $key );
-			$config['templates'][ $key ] = array( 'enabled' => 'yes' === AFFM_Security::value( $row, 'enabled' ) ? 'yes' : 'no', 'subject' => substr( sanitize_text_field( AFFM_Security::value( $row, 'subject', $definition['subject'] ) ), 0, 200 ), 'body' => substr( sanitize_textarea_field( AFFM_Security::value( $row, 'body', $definition['body'] ) ), 0, 10000 ) );
+			$row = REFM_Security::rows( REFM_Security::rows( $input, 'templates' ), $key );
+			$config['templates'][ $key ] = array( 'enabled' => 'yes' === REFM_Security::value( $row, 'enabled' ) ? 'yes' : 'no', 'subject' => substr( sanitize_text_field( REFM_Security::value( $row, 'subject', $definition['subject'] ) ), 0, 200 ), 'body' => substr( sanitize_textarea_field( REFM_Security::value( $row, 'body', $definition['body'] ) ), 0, 10000 ) );
 		}
 		return $config;
 	}
 	public static function save() {
-		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'affmint' ), 403 ); }
-		AFFM_Security::admin_request( 'affm_emails' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- AFFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
-		update_option( 'affm_emails', self::clean( isset( $_POST['affm_emails'] ) && is_array( $_POST['affm_emails'] ) ? wp_unslash( $_POST['affm_emails'] ) : array() ), false );
-		wp_safe_redirect( admin_url( 'admin.php?page=affmint&tab=emails&saved=1' ) ); exit;
+		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), 403 ); }
+		REFM_Security::admin_request( 'refm_emails' );
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
+		update_option( 'refm_emails', self::clean( isset( $_POST['refm_emails'] ) && is_array( $_POST['refm_emails'] ) ? wp_unslash( $_POST['refm_emails'] ) : array() ), false );
+		wp_safe_redirect( admin_url( 'admin.php?page=refmora&tab=emails&saved=1' ) ); exit;
 	}
 	public static function queue( $event, $id, $context = array() ) { self::$queue[] = array( $event, $id, $context ); }
 	public static function finish( $committed ) {
@@ -53,7 +53,7 @@ final class AFFM_Emails {
 		if ( 'yes' !== $template['enabled'] ) { return false; }
 		$recipient = 'admin' === $definitions[ $event ]['audience'] ? $config['admin_email'] : $user->user_email;
 		if ( ! is_email( $recipient ) ) { return false; }
-		$values = array( 'site_name' => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), 'affiliate_name' => $user->first_name ?: $user->display_name, 'status' => '', 'amount' => '', 'method' => '', 'note' => '', 'payout_id' => '', 'order_id' => '', 'dashboard_url' => wc_get_account_endpoint_url( 'affmint' ), 'admin_url' => admin_url( 'admin.php?page=affmint&tab=' . ( strpos( $event, 'joined' ) === 0 ? 'affiliates' : 'payouts' ) ) );
+		$values = array( 'site_name' => wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ), 'affiliate_name' => $user->first_name ?: $user->display_name, 'status' => '', 'amount' => '', 'method' => '', 'note' => '', 'payout_id' => '', 'order_id' => '', 'dashboard_url' => wc_get_account_endpoint_url( 'refmora' ), 'admin_url' => admin_url( 'admin.php?page=refmora&tab=' . ( strpos( $event, 'joined' ) === 0 ? 'affiliates' : 'payouts' ) ) );
 		$values = array_merge( $values, array_intersect_key( $context, $values ) );
 		$replace = array();
 		foreach ( $values as $key => $value ) { $replace[ '{' . $key . '}' ] = wp_strip_all_tags( (string) $value ); }
@@ -65,20 +65,20 @@ final class AFFM_Emails {
 		catch ( Throwable $error ) { return false; }
 	}
 	public static function payout( $event, $row ) {
-		self::queue( $event, $row->affiliate_id, array( 'payout_id' => $row->id, 'amount' => $row->currency . ' ' . wc_format_decimal( $row->amount, AFFM_Currency::precision( $row->currency ) ), 'method' => $row->method, 'status' => $row->status, 'note' => $row->note ) );
+		self::queue( $event, $row->affiliate_id, array( 'payout_id' => $row->id, 'amount' => $row->currency . ' ' . wc_format_decimal( $row->amount, REFM_Currency::precision( $row->currency ) ), 'method' => $row->method, 'status' => $row->status, 'note' => $row->note ) );
 	}
 	public static function render() {
 		$config = self::get();
-		echo '<form class="affm-settings" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="affm_save_emails">'; wp_nonce_field( 'affm_emails' );
-		echo '<section class="affm-card"><h2>' . esc_html__( 'Email delivery', 'affmint' ) . '</h2><p>' . esc_html__( 'Messages use WordPress wp_mail. Configure your site mail service or SMTP plugin for reliable delivery. Templates are plain text. Payment destination details are never included.', 'affmint' ) . '</p><div class="affm-form-grid">';
+		echo '<form class="refm-settings" method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><input type="hidden" name="action" value="refm_save_emails">'; wp_nonce_field( 'refm_emails' );
+		echo '<section class="refm-card"><h2>' . esc_html__( 'Email delivery', 'refmora' ) . '</h2><p>' . esc_html__( 'Messages use WordPress wp_mail. Configure your site mail service or SMTP plugin for reliable delivery. Templates are plain text. Payment destination details are never included.', 'refmora' ) . '</p><div class="refm-form-grid">';
 		foreach ( array( 'admin_email' => 'Admin notification email', 'from_email' => 'Sender email', 'from_name' => 'Sender name' ) as $key => $label ) {
-			echo '<div class="affm-field"><label for="affm-email-' . esc_attr( $key ) . '">' . esc_html( $label ) . '</label><input id="affm-email-' . esc_attr( $key ) . '" type="' . ( 'from_name' === $key ? 'text' : 'email' ) . '" name="affm_emails[' . esc_attr( $key ) . ']" value="' . esc_attr( $config[ $key ] ) . '" required></div>';
+			echo '<div class="refm-field"><label for="refm-email-' . esc_attr( $key ) . '">' . esc_html( $label ) . '</label><input id="refm-email-' . esc_attr( $key ) . '" type="' . ( 'from_name' === $key ? 'text' : 'email' ) . '" name="refm_emails[' . esc_attr( $key ) . ']" value="' . esc_attr( $config[ $key ] ) . '" required></div>';
 		}
-		echo '</div></section><p class="affm-muted">' . esc_html__( 'Placeholders: {site_name}, {affiliate_name}, {status}, {amount}, {method}, {note}, {payout_id}, {order_id}, {dashboard_url}, {admin_url}. Event-specific values are empty for other events.', 'affmint' ) . '</p>';
+		echo '</div></section><p class="refm-muted">' . esc_html__( 'Placeholders: {site_name}, {affiliate_name}, {status}, {amount}, {method}, {note}, {payout_id}, {order_id}, {dashboard_url}, {admin_url}. Event-specific values are empty for other events.', 'refmora' ) . '</p>';
 		foreach ( self::definitions() as $key => $definition ) {
-			$row = $config['templates'][ $key ]; $prefix = 'affm_emails[templates][' . $key . ']';
-			echo '<details class="affm-card affm-email-template"' . ( 'joined_admin' === $key ? ' open' : '' ) . '><summary>' . wp_kses( AFFM_UI::icon( 'emails' ), AFFM_UI::allowed_html() ) . esc_html( $definition['label'] ) . '</summary><div class="affm-template-editor"><label class="affm-toggle"><input type="checkbox" name="' . esc_attr( $prefix . '[enabled]' ) . '" value="yes"' . checked( $row['enabled'], 'yes', false ) . '> ' . esc_html__( 'Enable this email', 'affmint' ) . '</label><div class="affm-field"><label for="affm-subject-' . esc_attr( $key ) . '">' . esc_html__( 'Subject', 'affmint' ) . '</label><input id="affm-subject-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[subject]' ) . '" value="' . esc_attr( $row['subject'] ) . '" maxlength="200"></div><label for="affm-body-' . esc_attr( $key ) . '">' . esc_html__( 'Message', 'affmint' ) . '</label><textarea class="affm-template-body" id="affm-body-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[body]' ) . '" rows="6" maxlength="10000">' . esc_textarea( $row['body'] ) . '</textarea></div></details>';
+			$row = $config['templates'][ $key ]; $prefix = 'refm_emails[templates][' . $key . ']';
+			echo '<details class="refm-card refm-email-template"' . ( 'joined_admin' === $key ? ' open' : '' ) . '><summary>' . wp_kses( REFM_UI::icon( 'emails' ), REFM_UI::allowed_html() ) . esc_html( $definition['label'] ) . '</summary><div class="refm-template-editor"><label class="refm-toggle"><input type="checkbox" name="' . esc_attr( $prefix . '[enabled]' ) . '" value="yes"' . checked( $row['enabled'], 'yes', false ) . '> ' . esc_html__( 'Enable this email', 'refmora' ) . '</label><div class="refm-field"><label for="refm-subject-' . esc_attr( $key ) . '">' . esc_html__( 'Subject', 'refmora' ) . '</label><input id="refm-subject-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[subject]' ) . '" value="' . esc_attr( $row['subject'] ) . '" maxlength="200"></div><label for="refm-body-' . esc_attr( $key ) . '">' . esc_html__( 'Message', 'refmora' ) . '</label><textarea class="refm-template-body" id="refm-body-' . esc_attr( $key ) . '" name="' . esc_attr( $prefix . '[body]' ) . '" rows="6" maxlength="10000">' . esc_textarea( $row['body'] ) . '</textarea></div></details>';
 		}
-		AFFM_UI::footer( __( 'Save email templates', 'affmint' ) ); echo '</form>';
+		REFM_UI::footer( __( 'Save email templates', 'refmora' ) ); echo '</form>';
 	}
 }

@@ -1,13 +1,13 @@
-Automatic PayPal/Stripe payout features described here require the separate Affiliate WPM Pro add-on and an active license. Free supports one manual payout method without activation.
+Automatic PayPal/Stripe payout features described here require the separate Refmora Pro add-on and an active license. Free supports manual payout methods without activation.
 
 # PayPal and Stripe affiliate payouts
 
-Configure providers in WooCommerce > Affiliate WPM > Settings > Payout settings > Automatic payouts. Only administrators can configure credentials. Manual bank/mobile-wallet methods remain available, including Bangladesh methods.
+Configure providers in WooCommerce > Refmora > Settings > Payout settings > Automatic payouts. Only administrators can configure credentials. Manual bank/mobile-wallet methods remain available, including Bangladesh methods.
 
 ## Stripe: one Secret key
 
 1. Enable Stripe Connect and complete your platform profile in Stripe Dashboard.
-2. In Affiliate WPM select Sandbox / Test or Live. Enter that environment's platform Secret key (`sk_test_...` or `sk_live_...`). Enable automatic payouts and save.
+2. In Refmora select Sandbox / Test or Live. Enter that environment's platform Secret key (`sk_test_...` or `sk_live_...`). Enable automatic payouts and save.
 3. The plugin verifies the platform and attempts to create its webhook destinations automatically. You do not need a Publishable key (`pk_...`), OAuth Client ID (`ca_...`) or registered OAuth redirect URI.
 4. An affiliate selects their country in the Affiliate Area and clicks **Connect with Stripe**. Stripe-hosted onboarding collects identity and bank details. The plugin creates a Standard connected account and retains its account ID, country, creation time and platform binding. Country and cross-border eligibility are determined by your Stripe platform and Stripe rules; listing a country does not guarantee eligibility.
 5. The affiliate can resume incomplete onboarding. Requests verify current transfer capability and bank payout eligibility. A browser redirect alone never proves completion.
@@ -33,7 +33,7 @@ On a public HTTPS site, save settings to register webhook destinations. For a lo
 
 1. Use a verified PayPal Business account with Payouts access and enough funds. Live access must be granted by PayPal.
 2. In PayPal Developer Dashboard > Apps & Credentials, select Sandbox or Live and create/open a REST API application.
-3. Choose the matching environment in Affiliate WPM and enter its Client ID and Secret in the shared fields. Enable payouts and save. The plugin checks authentication without sending money.
+3. Choose the matching environment in Refmora and enter its Client ID and Secret in the shared fields. Enable payouts and save. The plugin checks authentication without sending money.
 4. Affiliates select PayPal and enter their PayPal account email. Sandbox requires a Sandbox recipient account.
 5. The administrator approves and explicitly sends the withdrawal. Unclaimed/pending payments stay reserved until PayPal confirms success or failure.
 

@@ -1,12 +1,12 @@
-/* AffMint: scoped, dependency-free settings controls. */
+/* Refmora: scoped, dependency-free settings controls. */
 (function () {
     'use strict';
-    const config = window.affmAdmin || {};
-    const notices = Array.from(document.querySelectorAll('.affm-admin [data-affm-toast]'));
+    const config = window.refmAdmin || {};
+    const notices = Array.from(document.querySelectorAll('.refm-admin [data-refm-toast]'));
     if (notices.length) {
         const stack = document.createElement('div');
-        stack.className = 'affm-toast-stack';
-        document.querySelector('.affm-admin').appendChild(stack);
+        stack.className = 'refm-toast-stack';
+        document.querySelector('.refm-admin').appendChild(stack);
         notices.forEach(function (toast) {
             stack.appendChild(toast);
             let timer = 0;
@@ -30,7 +30,7 @@
                 window.setTimeout(function () { toast.remove(); if (!stack.children.length) stack.remove(); }, reduced ? 0 : 180);
             }
             function visibility() { if (document.hidden) pause(); else resume(); }
-            toast.querySelector('.affm-toast-dismiss').addEventListener('click', dismiss);
+            toast.querySelector('.refm-toast-dismiss').addEventListener('click', dismiss);
             toast.addEventListener('mouseenter', function () { hovered = true; pause(); });
             toast.addEventListener('mouseleave', function () { hovered = false; resume(); });
             toast.addEventListener('focusin', pause);
@@ -42,17 +42,17 @@
         // Flash messages should not reappear on refresh or when copying the page URL.
         try {
             const url = new URL(window.location.href);
-            ['saved', 'affm_message', 'affm_error'].forEach(function (key) { url.searchParams.delete(key); });
+            ['saved', 'refm_message', 'refm_error'].forEach(function (key) { url.searchParams.delete(key); });
             window.history.replaceState(window.history.state, '', url.toString());
         } catch (ignore) { /* Keep notifications usable if history changes are unavailable. */ }
     }
     let dirty = false;
-    document.querySelectorAll('form.affm-settings').forEach(function (form) {
-        const bar = form.querySelector('.affm-save-bar') || (form.id ? document.querySelector('.affm-save-bar button[form="' + form.id + '"]')?.closest('.affm-save-bar') : null);
-        const state = bar ? bar.querySelector('.affm-save-state') : null;
+    document.querySelectorAll('form.refm-settings').forEach(function (form) {
+        const bar = form.querySelector('.refm-save-bar') || (form.id ? document.querySelector('.refm-save-bar button[form="' + form.id + '"]')?.closest('.refm-save-bar') : null);
+        const state = bar ? bar.querySelector('.refm-save-state') : null;
         if (bar) {
             const slot = document.createElement('div');
-            slot.className = 'affm-save-bar-slot';
+            slot.className = 'refm-save-bar-slot';
             bar.before(slot);
             slot.appendChild(bar);
             let frame = 0;
@@ -61,8 +61,8 @@
                 const rect = slot.getBoundingClientRect();
                 const inset = window.innerWidth <= 600 ? 10 : 16;
                 const docked = rect.bottom <= window.innerHeight - inset;
-                bar.classList.toggle('affm-save-bar-fixed', !docked);
-                bar.classList.toggle('affm-save-bar-docked', docked);
+                bar.classList.toggle('refm-save-bar-fixed', !docked);
+                bar.classList.toggle('refm-save-bar-docked', docked);
                 if (docked) {
                     bar.style.removeProperty('left');
                     bar.style.removeProperty('width');
@@ -89,28 +89,28 @@
         form.addEventListener('input', markDirty);
         form.addEventListener('change', markDirty);
         form.addEventListener('click', function (event) {
-            if (event.target.closest('#affm-add-method, .affm-remove-method')) markDirty();
+            if (event.target.closest('#refm-add-method, .refm-remove-method')) markDirty();
         });
         form.addEventListener('submit', function () {
             dirty = false;
             if (state) state.textContent = config.saving || 'Saving your changes...';
         });
-        const preview = form.querySelector('.affm-design-preview');
-        if (preview) form.querySelectorAll('input[type="color"], #affm-radius').forEach(function (input) {
+        const preview = form.querySelector('.refm-design-preview');
+        if (preview) form.querySelectorAll('input[type="color"], #refm-radius').forEach(function (input) {
             input.addEventListener('input', function () {
-                const key = input.id.replace('affm-design-', '');
-                if (input.type === 'color' && /^#[a-f0-9]{6}$/i.test(input.value)) preview.style.setProperty('--affm-' + key, input.value);
-                else if (input.id === 'affm-radius') preview.style.setProperty('--affm-radius', Math.min(24, Math.max(0, Number(input.value) || 0)) + 'px');
+                const key = input.id.replace('refm-design-', '');
+                if (input.type === 'color' && /^#[a-f0-9]{6}$/i.test(input.value)) preview.style.setProperty('--refm-' + key, input.value);
+                else if (input.id === 'refm-radius') preview.style.setProperty('--refm-radius', Math.min(24, Math.max(0, Number(input.value) || 0)) + 'px');
             });
         });
     });
     window.addEventListener('beforeunload', function (event) {
         if (dirty) { event.preventDefault(); event.returnValue = ''; }
     });
-    const exchange = document.getElementById('affm-exchange_source');
-    const manualRates = document.getElementById('affm-manual-exchange-rates');
-    const release = document.getElementById('affm-release_mode');
-    const releaseDays = document.getElementById('affm-release-days');
+    const exchange = document.getElementById('refm-exchange_source');
+    const manualRates = document.getElementById('refm-manual-exchange-rates');
+    const release = document.getElementById('refm-release_mode');
+    const releaseDays = document.getElementById('refm-release-days');
     function conditionalFields() {
         if (exchange && manualRates) manualRates.hidden = !['auto', 'manual'].includes(exchange.value);
         if (release && releaseDays) {
@@ -121,12 +121,12 @@
     }
     if (exchange) exchange.addEventListener('change', conditionalFields);
     if (release) release.addEventListener('change', conditionalFields);
-    document.querySelectorAll('[data-affm-provider]').forEach(function (card) {
-        const provider = card.dataset.affmProvider;
-        const environment = card.querySelector('select[name="affm_gateway[' + provider + '_mode]"]');
-        const marker = card.querySelector('[data-affm-credential-mode]');
-        const title = card.querySelector('[data-affm-credential-title]');
-        const fields = Array.from(card.querySelectorAll('[data-affm-credential]'));
+    document.querySelectorAll('[data-refm-provider]').forEach(function (card) {
+        const provider = card.dataset.refmProvider;
+        const environment = card.querySelector('select[name="refm_gateway[' + provider + '_mode]"]');
+        const marker = card.querySelector('[data-refm-credential-mode]');
+        const title = card.querySelector('[data-refm-credential-title]');
+        const fields = Array.from(card.querySelectorAll('[data-refm-credential]'));
         if (!environment || !marker) return;
         let current = marker.value;
         const drafts = {};
@@ -147,4 +147,46 @@
         refresh();
     });
     conditionalFields();
+})();
+
+/* Refmora Pro manual method editor. */
+(function(){'use strict';
+    const list = document.getElementById('refm-method-list');
+    const mode = document.getElementById('refm-payout_mode');
+    const selection = document.getElementById('refm-method_selection');
+    const add = document.getElementById('refm-add-method');
+    let index = list ? list.children.length : 0;
+    function sync() {
+        const manual = document.getElementById('refm-manual-methods');
+        if (manual && mode) manual.hidden = mode.value !== 'manual';
+    }
+    function single(changed) {
+        if (!list || !selection || selection.value !== 'single') return;
+        const checked = Array.from(list.querySelectorAll('input[type="checkbox"]:checked'));
+        const keep = changed && changed.checked ? changed : checked[0];
+        checked.forEach(function (box) { box.checked = box === keep; });
+    }
+    if (add) add.addEventListener('click', function () {
+        const template = document.getElementById('refm-method-template');
+        const fragment = template.content.cloneNode(true);
+        fragment.querySelectorAll('[name]').forEach(function (el) { el.name = el.name.replace('__INDEX__', String(index)); });
+        index += 1;
+        list.appendChild(fragment);
+        single(); sync();
+        list.lastElementChild.querySelector('input[type="text"]').focus();
+    });
+    if (list) {
+        list.addEventListener('click', function (event) {
+            if (event.target.closest('.refm-remove-method')) {
+                event.target.closest('.refm-method-row').remove(); sync();
+            }
+        });
+        list.addEventListener('change', function (event) {
+            if (event.target.type === 'checkbox') single(event.target);
+        });
+    }
+    if (mode) mode.addEventListener('change', sync);
+    if (selection) selection.addEventListener('change', function () { single(); });
+
+    sync();
 })();
