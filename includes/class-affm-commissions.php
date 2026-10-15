@@ -1,11 +1,11 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-final class AWPM_Commissions {
+final class AFFM_Commissions {
 	public static function init() {
 		add_action( 'woocommerce_before_delete_order', array( __CLASS__, 'placeholder_removed' ), 10, 2 );
 		add_action( 'woocommerce_trash_order', array( __CLASS__, 'placeholder_removed' ) );
-		add_action( 'awpm_release_order', array( __CLASS__, 'sync' ) );
+		add_action( 'affm_release_order', array( __CLASS__, 'sync' ) );
 		add_action( 'woocommerce_checkout_order_created', array( __CLASS__, 'sync' ) );
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( __CLASS__, 'sync' ) );
 		add_action( 'woocommerce_order_status_changed', array( __CLASS__, 'sync' ), 20 );
@@ -15,13 +15,13 @@ final class AWPM_Commissions {
 	/** Snapshot the hold at first completion; released and paid history stays released. */
 	public static function available_at( $order, $row = null ) {
 		if ( ! $order->has_status( 'completed' ) ) { return 0; }
-		if ( $order->meta_exists( '_awpm_available_at' ) ) { return max( 0, (int) $order->get_meta( '_awpm_available_at' ) ); }
+		if ( $order->meta_exists( '_affm_available_at' ) ) { return max( 0, (int) $order->get_meta( '_affm_available_at' ) ); }
 		$released = $row && ( in_array( $row->status, array( 'available', 'reserved', 'paid' ), true ) || (float) $row->paid_amount > 0 || $row->payout_id );
-		$days = ! $released && 'delay' === AWPM_Settings::get( 'release_mode' ) ? max( 1, min( 365, (int) AWPM_Settings::get( 'release_days' ) ) ) : 0;
+		$days = ! $released && 'delay' === AFFM_Settings::get( 'release_mode' ) ? max( 1, min( 365, (int) AFFM_Settings::get( 'release_days' ) ) ) : 0;
 		$completed = $order->get_date_completed();
 		$due = $days ? ( $completed ? $completed->getTimestamp() : time() ) + $days * DAY_IN_SECONDS : 0;
-		$order->update_meta_data( '_awpm_release_days', $days );
-		$order->update_meta_data( '_awpm_available_at', $due );
+		$order->update_meta_data( '_affm_release_days', $days );
+		$order->update_meta_data( '_affm_available_at', $due );
 		return $due;
 	}
 	/** Use WooCommerce's durable scheduler, falling back to WordPress cron. */
@@ -29,20 +29,20 @@ final class AWPM_Commissions {
 		$args = array( (int) $id );
 		$when = max( time() + 1, (int) $due );
 		if ( function_exists( 'as_schedule_single_action' ) ) {
-			if ( ! as_get_scheduled_actions( array( 'hook' => 'awpm_release_order', 'args' => $args, 'group' => 'affiliate-wpm', 'status' => 'pending', 'per_page' => 1 ), 'ids' ) ) {
-				if ( ! as_schedule_single_action( $when, 'awpm_release_order', $args, 'affiliate-wpm', true ) ) { self::retry( $id ); }
+			if ( ! as_get_scheduled_actions( array( 'hook' => 'affm_release_order', 'args' => $args, 'group' => 'affmint', 'status' => 'pending', 'per_page' => 1 ), 'ids' ) ) {
+				if ( ! as_schedule_single_action( $when, 'affm_release_order', $args, 'affmint', true ) ) { self::retry( $id ); }
 			}
-		} elseif ( ! wp_next_scheduled( 'awpm_release_order', $args ) && ! wp_schedule_single_event( $when, 'awpm_release_order', $args ) ) { self::retry( $id ); }
+		} elseif ( ! wp_next_scheduled( 'affm_release_order', $args ) && ! wp_schedule_single_event( $when, 'affm_release_order', $args ) ) { self::retry( $id ); }
 	}
 	public static function refund_deleted( $refund_id, $order_id ) { self::sync( $order_id ); }
 	public static function customer_identity( $order ) {
 		$email = strtolower( trim( $order->get_billing_email() ) );
-		return array( 'customer_id' => (int) $order->get_customer_id(), 'customer_hash' => hash_hmac( 'sha256', $email ?: 'unknown-order:' . $order->get_id(), get_option( 'awpm_identity_key', wp_salt( 'auth' ) ) ) );
+		return array( 'customer_id' => (int) $order->get_customer_id(), 'customer_hash' => hash_hmac( 'sha256', $email ?: 'unknown-order:' . $order->get_id(), get_option( 'affm_identity_key', wp_salt( 'auth' ) ) ) );
 	}
 	/** Upgrade old commission identities in bounded batches, using order CRUD for HPOS. */
 	private static function prepare_history() {
 		global $wpdb;
-		$table = AWPM_Store::table( 'commissions' );
+		$table = AFFM_Store::table( 'commissions' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id,order_id FROM %i WHERE customer_hash=\'\' AND (amount>0 OR paid_amount>0) ORDER BY id ASC LIMIT 100', $table ) );
 		foreach ( $rows as $row ) {
@@ -56,8 +56,8 @@ final class AWPM_Commissions {
 	}
 	private static function retry( $id ) {
 		// Only pending jobs suppress a retry; the currently running job must be able to reschedule itself.
-		if ( function_exists( 'as_schedule_single_action' ) && ! as_get_scheduled_actions( array( 'hook' => 'awpm_retry_order', 'args' => array( $id ), 'group' => 'affiliate-wpm', 'status' => 'pending', 'per_page' => 1 ), 'ids' ) ) {
-			as_schedule_single_action( time() + 30, 'awpm_retry_order', array( $id ), 'affiliate-wpm' );
+		if ( function_exists( 'as_schedule_single_action' ) && ! as_get_scheduled_actions( array( 'hook' => 'affm_retry_order', 'args' => array( $id ), 'group' => 'affmint', 'status' => 'pending', 'per_page' => 1 ), 'ids' ) ) {
+			as_schedule_single_action( time() + 30, 'affm_retry_order', array( $id ), 'affmint' );
 		}
 	}
 
@@ -83,11 +83,11 @@ final class AWPM_Commissions {
 	}
 	public static function amount( $order ) {
 		if ( $order->has_status( array( 'cancelled', 'failed', 'refunded' ) ) ) { return 0; }
-		$fx = $order->get_meta( '_awpm_fx' );
-		$factor = is_array( $fx ) && AWPM_Currency::valid_rate( $fx['rate'] ?? null ) ? (float) $fx['rate'] : 1;
+		$fx = $order->get_meta( '_affm_fx' );
+		$factor = is_array( $fx ) && AFFM_Currency::valid_rate( $fx['rate'] ?? null ) ? (float) $fx['rate'] : 1;
 		$converted = is_array( $fx ) && (int) ( $fx['version'] ?? 1 ) >= 2;
 		$amount = 0; $allocated = 0;
-		foreach ( (array) $order->get_meta( '_awpm_rates' ) as $key => $rate ) {
+		foreach ( (array) $order->get_meta( '_affm_rates' ) as $key => $rate ) {
 			$item = self::rate_item( $order, $key, $rate );
 			$id = $item ? $item->get_id() : 0;
 			$refund = $id ? (float) $order->get_total_refunded_for_item( $id ) : 0;
@@ -99,7 +99,7 @@ final class AWPM_Commissions {
 		}
 		$unallocated = max( 0, (float) $order->get_total_refunded() - $allocated );
 		if ( $unallocated && $order->get_total() > $allocated ) { $amount *= max( 0, 1 - $unallocated / ( (float) $order->get_total() - $allocated ) ); }
-		$precision = is_array( $fx ) ? max( 0, min( 6, (int) ( $fx['precision'] ?? 2 ) ) ) : AWPM_Currency::precision( $order->get_meta( '_awpm_currency' ) ?: $order->get_currency() );
+		$precision = is_array( $fx ) ? max( 0, min( 6, (int) ( $fx['precision'] ?? 2 ) ) ) : AFFM_Currency::precision( $order->get_meta( '_affm_currency' ) ?: $order->get_currency() );
 		return round( $amount, $precision );
 	}
 	/** Abandoned checkout placeholders are not submitted customer orders. */
@@ -118,7 +118,7 @@ final class AWPM_Commissions {
 		global $wpdb;
 		if ( $row && 'pending' === $row->status && 0 === (int) $row->payout_id && 0.0 === (float) $row->paid_amount ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
-			AWPM_Store::must( $wpdb->delete( AWPM_Store::table( 'commissions' ), array( 'id' => $row->id, 'status' => 'pending', 'payout_id' => 0, 'paid_amount' => 0 ) ) );
+			AFFM_Store::must( $wpdb->delete( AFFM_Store::table( 'commissions' ), array( 'id' => $row->id, 'status' => 'pending', 'payout_id' => 0, 'paid_amount' => 0 ) ) );
 		}
 	}
 	public static function sync( $order_or_id, $only_missing = false ) {
@@ -128,45 +128,45 @@ final class AWPM_Commissions {
 		$order = wc_get_order( $id );
 		if ( ! $order || $order instanceof WC_Order_Refund ) { return; }
 		if ( self::incomplete_order( $order ) ) {
-			$table = AWPM_Store::table( 'commissions' );
+			$table = AFFM_Store::table( 'commissions' );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE order_id=%d', $table, $id ) );
 			if ( ! $row ) { return; }
-			return AWPM_Store::locked( (int) $row->affiliate_id, function () use ( $wpdb, $id, $table ) {
+			return AFFM_Store::locked( (int) $row->affiliate_id, function () use ( $wpdb, $id, $table ) {
 				$current = wc_get_order( $id );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 				if ( $current && self::incomplete_order( $current ) ) { self::discard_placeholder_row( $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE order_id=%d', $table, $id ) ) ); }
 			} );
 		}
-		$affiliate = (int) $order->get_meta( '_awpm_affiliate' );
-		if ( ! $affiliate || ! $order->get_meta( '_awpm_rates' ) ) { return; }
-		$currency = $order->get_meta( '_awpm_currency' );
+		$affiliate = (int) $order->get_meta( '_affm_affiliate' );
+		if ( ! $affiliate || ! $order->get_meta( '_affm_rates' ) ) { return; }
+		$currency = $order->get_meta( '_affm_currency' );
 
-		$policy = $order->get_meta( '_awpm_purchase_policy' ) ?: 'multiple';
+		$policy = $order->get_meta( '_affm_purchase_policy' ) ?: 'multiple';
 		if ( 'once' === $policy && ! self::prepare_history() ) {
 			self::retry( $id );
-			return new WP_Error( 'history', __( 'Previous customer commissions are being indexed. This order will be retried automatically.', 'affiliate-wpm' ) );
+			return new WP_Error( 'history', __( 'Previous customer commissions are being indexed. This order will be retried automatically.', 'affmint' ) );
 		}
 		$identity = self::customer_identity( $order );
 		$locks = array( 'customer-email:' . $identity['customer_hash'] );
 		if ( $identity['customer_id'] ) { $locks[] = 'customer-account:' . $identity['customer_id']; }
-		$result = AWPM_Store::locked( $affiliate, function () use ( $wpdb, $id, $affiliate, $currency, $policy, $identity, $only_missing ) {
+		$result = AFFM_Store::locked( $affiliate, function () use ( $wpdb, $id, $affiliate, $currency, $policy, $identity, $only_missing ) {
 			// Reload under the lock so an older order-status callback cannot overwrite a refund.
 			$order = wc_get_order( $id );
-			$table = AWPM_Store::table( 'commissions' );
+			$table = AFFM_Store::table( 'commissions' );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE order_id=%d', $table, $id ) );
 			if ( ! $order ) { return; }
 			if ( self::incomplete_order( $order ) ) { self::discard_placeholder_row( $row ); return; }
-			if ( $only_missing && $row ) { return new WP_Error( 'exists', __( 'This order already has a commission record. Its financial history was left unchanged.', 'affiliate-wpm' ) ); }
+			if ( $only_missing && $row ) { return new WP_Error( 'exists', __( 'This order already has a commission record. Its financial history was left unchanged.', 'affmint' ) ); }
 			// Existing same-currency records keep their original calculation semantics.
-			$legacy = $row && ! $order->get_meta( '_awpm_calculation_version' ) && $currency === $order->get_currency();
-			$fx = AWPM_Currency::snapshot( $order, $legacy );
+			$legacy = $row && ! $order->get_meta( '_affm_calculation_version' ) && $currency === $order->get_currency();
+			$fx = AFFM_Currency::snapshot( $order, $legacy );
 			if ( is_wp_error( $fx ) ) { return $fx; }
 			$due = self::available_at( $order, $row );
 			$order->save_meta_data();
 			$amount = self::amount( $order );
-			if ( ! is_finite( $amount ) || $amount > 99999999999999 ) { return new WP_Error( 'currency', __( 'Converted commission exceeds the supported amount. Review the exchange rate.', 'affiliate-wpm' ) ); }
+			if ( ! is_finite( $amount ) || $amount > 99999999999999 ) { return new WP_Error( 'currency', __( 'Converted commission exceeds the supported amount. Review the exchange rate.', 'affmint' ) ); }
 			$status = $order->has_status( array( 'cancelled', 'failed', 'refunded' ) ) ? 'rejected' : ( $order->has_status( 'completed' ) && $due <= time() ? 'available' : 'pending' );
 			$eligibility = $row ? $row->eligibility : 'eligible';
 			if ( 'once' === $policy ) {
@@ -182,7 +182,7 @@ final class AWPM_Commissions {
 				if ( 'repeat' === $eligibility ) { $amount = 0; $status = 'rejected'; }
 			}
 			if ( $row && $row->payout_id && ( abs( $amount - (float) $row->amount ) > 0.000001 || 'available' !== $status ) ) {
-				AWPM_Payouts::release( $row->payout_id, __( 'Order changed or refunded. Please request the updated balance again.', 'affiliate-wpm' ) );
+				AFFM_Payouts::release( $row->payout_id, __( 'Order changed or refunded. Please request the updated balance again.', 'affmint' ) );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 				$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM %i WHERE order_id=%d', $table, $id ) );
 			}
@@ -191,28 +191,28 @@ final class AWPM_Commissions {
 			$data = array( 'amount' => $amount, 'status' => $status, 'eligibility' => $eligibility, 'updated_at' => current_time( 'mysql', true ) );
 			if ( ! $row || ! $row->customer_hash ) { $data += $identity; }
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
-			if ( $row ) { AWPM_Store::must( $wpdb->update( $table, $data, array( 'id' => $row->id ) ) ); }
+			if ( $row ) { AFFM_Store::must( $wpdb->update( $table, $data, array( 'id' => $row->id ) ) ); }
 			else {
 				$data += array( 'order_id' => $id, 'affiliate_id' => $affiliate, 'currency' => $currency, 'created_at' => current_time( 'mysql', true ) );
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
-				AWPM_Store::must( $wpdb->insert( $table, $data ) );
+				AFFM_Store::must( $wpdb->insert( $table, $data ) );
 			}
 			if ( 'available' === $status && $amount > 0 && ( ! $row || 'pending' === $row->status ) ) {
-				AWPM_Emails::queue( 'commission_affiliate', $affiliate, array( 'order_id' => $id, 'amount' => $currency . ' ' . wc_format_decimal( $amount, AWPM_Currency::precision( $currency ) ), 'status' => 'available' ) );
+				AFFM_Emails::queue( 'commission_affiliate', $affiliate, array( 'order_id' => $id, 'amount' => $currency . ' ' . wc_format_decimal( $amount, AFFM_Currency::precision( $currency ) ), 'status' => 'available' ) );
 			}
 			return true;
 		}, $locks );
 		if ( is_wp_error( $result ) ) {
-			if ( 'currency' === $result->get_error_code() ) { $order = wc_get_order( $id ); AWPM_Currency::issue( $order, $result ); }
+			if ( 'currency' === $result->get_error_code() ) { $order = wc_get_order( $id ); AFFM_Currency::issue( $order, $result ); }
 			elseif ( 'exists' !== $result->get_error_code() ) { self::retry( $id ); }
 		}
 		if ( true === $result ) {
 			$order = wc_get_order( $id );
-			$due = (int) $order->get_meta( '_awpm_available_at' );
+			$due = (int) $order->get_meta( '_affm_available_at' );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
-			if ( $due > time() && $order->has_status( 'completed' ) && 'pending' === $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM %i WHERE order_id=%d', AWPM_Store::table( 'commissions' ), $id ) ) ) { self::schedule_release( $id, $due ); }
+			if ( $due > time() && $order->has_status( 'completed' ) && 'pending' === $wpdb->get_var( $wpdb->prepare( 'SELECT status FROM %i WHERE order_id=%d', AFFM_Store::table( 'commissions' ), $id ) ) ) { self::schedule_release( $id, $due ); }
 		}
 		return $result;
 	}
 }
-add_action( 'awpm_retry_order', array( 'AWPM_Commissions', 'sync' ) );
+add_action( 'affm_retry_order', array( 'AFFM_Commissions', 'sync' ) );

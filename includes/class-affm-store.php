@@ -1,11 +1,11 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-final class AWPM_Store {
+final class AFFM_Store {
 	public static function table( $name ) {
 		global $wpdb;
-		if ( ! in_array( $name, array( 'commissions', 'payouts', 'clicks', 'customers' ), true ) ) { throw new InvalidArgumentException( 'Unknown Affiliate WPM table.' ); }
-		return $wpdb->prefix . 'awpm_' . $name;
+		if ( ! in_array( $name, array( 'commissions', 'payouts', 'clicks', 'customers' ), true ) ) { throw new InvalidArgumentException( 'Unknown AffMint table.' ); }
+		return $wpdb->prefix . 'affm_' . $name;
 	}
 
 	public static function install() {
@@ -16,7 +16,7 @@ final class AWPM_Store {
 		$payouts = self::table( 'payouts' );
 		$clicks = self::table( 'clicks' );
 		$customers = self::table( 'customers' );
-		add_option( 'awpm_identity_key', wp_generate_password( 64, true, true ), '', false );
+		add_option( 'affm_identity_key', wp_generate_password( 64, true, true ), '', false );
 		dbDelta( "CREATE TABLE $clicks (
 			affiliate_id bigint(20) unsigned NOT NULL,
 			click_date date NOT NULL,
@@ -65,20 +65,20 @@ final class AWPM_Store {
 			PRIMARY KEY  (id),
 			KEY affiliate_status (affiliate_id,status)
 		) ENGINE=InnoDB $collate;" );
-		update_option( 'awpm_db_version', AWPM_VERSION, false );
+		update_option( 'affm_db_version', AFFM_VERSION, false );
 	}
 
 	/** Serialize all balance mutations for one affiliate, including order refunds. */
 	public static function locked( $affiliate_id, $callback, $additional_locks = array() ) {
 		global $wpdb;
-		$keys = array( 'awpm_' . md5( $wpdb->prefix . ':' . absint( $affiliate_id ) ) );
-		foreach ( $additional_locks as $identity ) { $keys[] = 'awpm_' . md5( $wpdb->prefix . ':' . $identity ); }
+		$keys = array( 'affm_' . md5( $wpdb->prefix . ':' . absint( $affiliate_id ) ) );
+		foreach ( $additional_locks as $identity ) { $keys[] = 'affm_' . md5( $wpdb->prefix . ':' . $identity ); }
 		$keys = array_unique( $keys ); sort( $keys ); $held = array(); $committed = false;
 		try {
 			foreach ( $keys as $key ) {
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 				if ( '1' !== (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 5)', $key ) ) ) {
-					return new WP_Error( 'busy', __( 'Your balance is being updated. Please try again.', 'affiliate-wpm' ) );
+					return new WP_Error( 'busy', __( 'Your balance is being updated. Please try again.', 'affmint' ) );
 				}
 				$held[] = $key;
 			}
@@ -92,18 +92,18 @@ final class AWPM_Store {
 		} catch ( Throwable $error ) {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			$wpdb->query( 'ROLLBACK' );
-			return new WP_Error( 'storage', __( 'The update could not be saved. Please try again.', 'affiliate-wpm' ) );
+			return new WP_Error( 'storage', __( 'The update could not be saved. Please try again.', 'affmint' ) );
 		} finally {
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom financial tables/transaction locks require direct SQL and fresh state to preserve reservation and refund consistency.
 			foreach ( array_reverse( $held ) as $key ) { $wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $key ) ); }
 			if ( ! $committed ) { wp_cache_delete( absint( $affiliate_id ), 'user_meta' ); }
-			AWPM_Emails::finish( $committed );
+			AFFM_Emails::finish( $committed );
 		}
 	}
 
 	public static function must( $result ) {
 		if ( false === $result ) {
-			throw new RuntimeException( 'Affiliate WPM database write failed.' );
+			throw new RuntimeException( 'AffMint database write failed.' );
 		}
 		return $result;
 	}
@@ -128,11 +128,11 @@ final class AWPM_Store {
 	}
 
 	public static function money( $amount, $currency = '' ) {
-		return AWPM_Currency::money( $amount, $currency ?: AWPM_Settings::get( 'currency' ) );
+		return AFFM_Currency::money( $amount, $currency ?: AFFM_Settings::get( 'currency' ) );
 	}
 
 	public static function status( $status ) {
-		$labels = array( 'processing' => __( 'Processing', 'affiliate-wpm' ), 'tested' => __( 'Sandbox successful', 'affiliate-wpm' ), 'failed' => __( 'Failed', 'affiliate-wpm' ), 'pending' => __( 'Pending', 'affiliate-wpm' ), 'available' => __( 'Available', 'affiliate-wpm' ), 'reserved' => __( 'In withdrawal', 'affiliate-wpm' ), 'paid' => __( 'Paid', 'affiliate-wpm' ), 'approved' => __( 'Approved', 'affiliate-wpm' ), 'completed' => __( 'Completed', 'affiliate-wpm' ), 'rejected' => __( 'Rejected', 'affiliate-wpm' ), 'paused' => __( 'Paused', 'affiliate-wpm' ) );
-		return '<span class="awpm-badge awpm-' . esc_attr( $status ) . '">' . esc_html( $labels[ $status ] ?? $status ) . '</span>';
+		$labels = array( 'processing' => __( 'Processing', 'affmint' ), 'tested' => __( 'Sandbox successful', 'affmint' ), 'failed' => __( 'Failed', 'affmint' ), 'pending' => __( 'Pending', 'affmint' ), 'available' => __( 'Available', 'affmint' ), 'reserved' => __( 'In withdrawal', 'affmint' ), 'paid' => __( 'Paid', 'affmint' ), 'approved' => __( 'Approved', 'affmint' ), 'completed' => __( 'Completed', 'affmint' ), 'rejected' => __( 'Rejected', 'affmint' ), 'paused' => __( 'Paused', 'affmint' ) );
+		return '<span class="affm-badge affm-' . esc_attr( $status ) . '">' . esc_html( $labels[ $status ] ?? $status ) . '</span>';
 	}
 }

@@ -1,12 +1,12 @@
 ﻿(function () {
     'use strict';
-    const method = document.getElementById('awpm-method');
+    const method = document.getElementById('affm-method');
     if (method) {
         function payoutMethod() {
             const option = method.selectedOptions[0];
-            document.getElementById('awpm-instructions').textContent = option.dataset.instructions || '';
-            const details = document.getElementById('awpm-details');
-            const label = document.querySelector('label[for="awpm-details"]');
+            document.getElementById('affm-instructions').textContent = option.dataset.instructions || '';
+            const details = document.getElementById('affm-details');
+            const label = document.querySelector('label[for="affm-details"]');
             const stripe = option.dataset.provider === 'stripe';
             if (details) { details.disabled = stripe; details.required = !stripe; details.hidden = stripe; }
             if (label) { label.hidden = stripe; label.textContent = option.dataset.provider === 'paypal' ? 'PayPal email' : 'Payment destination details'; }
@@ -14,14 +14,14 @@
         }
         method.addEventListener('change', payoutMethod); payoutMethod();
     }
-    document.querySelectorAll('[data-awpm-copy]').forEach(function (copy) {
+    document.querySelectorAll('[data-affm-copy]').forEach(function (copy) {
         const originalLabel = copy.textContent;
         let copyTimer;
         copy.addEventListener('click', async function () {
-            const input = document.getElementById('awpm-ref-link');
-            const url = copy.dataset.awpmUrl || (input && input.value);
+            const input = document.getElementById('affm-ref-link');
+            const url = copy.dataset.affmUrl || (input && input.value);
             if (!url) return;
-            const scope = copy.closest('.awpm-best-sellers') || copy.closest('.awpm-link-card');
+            const scope = copy.closest('.affm-best-sellers') || copy.closest('.affm-link-card');
             const feedback = scope && scope.querySelector('[role="status"]');
             copy.disabled = true;
             let temporary;
@@ -43,7 +43,7 @@
                 copyTimer = window.setTimeout(function () { copy.textContent = originalLabel; }, 2000);
             } catch (error) {
                 if (feedback) feedback.textContent = copy.dataset.copyFailed || 'Could not copy. Please try again.';
-                if (!copy.dataset.awpmUrl && input) { input.focus(); input.select(); }
+                if (!copy.dataset.affmUrl && input) { input.focus(); input.select(); }
             } finally {
                 if (temporary) { temporary.remove(); copy.focus(); }
                 copy.disabled = false;

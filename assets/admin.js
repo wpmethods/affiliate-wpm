@@ -1,12 +1,12 @@
-/* Affiliate WPM: scoped, dependency-free settings controls. */
+/* AffMint: scoped, dependency-free settings controls. */
 (function () {
     'use strict';
-    const config = window.awpmAdmin || {};
-    const notices = Array.from(document.querySelectorAll('.awpm-admin [data-awpm-toast]'));
+    const config = window.affmAdmin || {};
+    const notices = Array.from(document.querySelectorAll('.affm-admin [data-affm-toast]'));
     if (notices.length) {
         const stack = document.createElement('div');
-        stack.className = 'awpm-toast-stack';
-        document.querySelector('.awpm-admin').appendChild(stack);
+        stack.className = 'affm-toast-stack';
+        document.querySelector('.affm-admin').appendChild(stack);
         notices.forEach(function (toast) {
             stack.appendChild(toast);
             let timer = 0;
@@ -30,7 +30,7 @@
                 window.setTimeout(function () { toast.remove(); if (!stack.children.length) stack.remove(); }, reduced ? 0 : 180);
             }
             function visibility() { if (document.hidden) pause(); else resume(); }
-            toast.querySelector('.awpm-toast-dismiss').addEventListener('click', dismiss);
+            toast.querySelector('.affm-toast-dismiss').addEventListener('click', dismiss);
             toast.addEventListener('mouseenter', function () { hovered = true; pause(); });
             toast.addEventListener('mouseleave', function () { hovered = false; resume(); });
             toast.addEventListener('focusin', pause);
@@ -42,17 +42,17 @@
         // Flash messages should not reappear on refresh or when copying the page URL.
         try {
             const url = new URL(window.location.href);
-            ['saved', 'awpm_message', 'awpm_error'].forEach(function (key) { url.searchParams.delete(key); });
+            ['saved', 'affm_message', 'affm_error'].forEach(function (key) { url.searchParams.delete(key); });
             window.history.replaceState(window.history.state, '', url.toString());
         } catch (ignore) { /* Keep notifications usable if history changes are unavailable. */ }
     }
     let dirty = false;
-    document.querySelectorAll('form.awpm-settings').forEach(function (form) {
-        const bar = form.querySelector('.awpm-save-bar') || (form.id ? document.querySelector('.awpm-save-bar button[form="' + form.id + '"]')?.closest('.awpm-save-bar') : null);
-        const state = bar ? bar.querySelector('.awpm-save-state') : null;
+    document.querySelectorAll('form.affm-settings').forEach(function (form) {
+        const bar = form.querySelector('.affm-save-bar') || (form.id ? document.querySelector('.affm-save-bar button[form="' + form.id + '"]')?.closest('.affm-save-bar') : null);
+        const state = bar ? bar.querySelector('.affm-save-state') : null;
         if (bar) {
             const slot = document.createElement('div');
-            slot.className = 'awpm-save-bar-slot';
+            slot.className = 'affm-save-bar-slot';
             bar.before(slot);
             slot.appendChild(bar);
             let frame = 0;
@@ -61,8 +61,8 @@
                 const rect = slot.getBoundingClientRect();
                 const inset = window.innerWidth <= 600 ? 10 : 16;
                 const docked = rect.bottom <= window.innerHeight - inset;
-                bar.classList.toggle('awpm-save-bar-fixed', !docked);
-                bar.classList.toggle('awpm-save-bar-docked', docked);
+                bar.classList.toggle('affm-save-bar-fixed', !docked);
+                bar.classList.toggle('affm-save-bar-docked', docked);
                 if (docked) {
                     bar.style.removeProperty('left');
                     bar.style.removeProperty('width');
@@ -89,28 +89,28 @@
         form.addEventListener('input', markDirty);
         form.addEventListener('change', markDirty);
         form.addEventListener('click', function (event) {
-            if (event.target.closest('#awpm-add-method, .awpm-remove-method')) markDirty();
+            if (event.target.closest('#affm-add-method, .affm-remove-method')) markDirty();
         });
         form.addEventListener('submit', function () {
             dirty = false;
             if (state) state.textContent = config.saving || 'Saving your changes...';
         });
-        const preview = form.querySelector('.awpm-design-preview');
-        if (preview) form.querySelectorAll('input[type="color"], #awpm-radius').forEach(function (input) {
+        const preview = form.querySelector('.affm-design-preview');
+        if (preview) form.querySelectorAll('input[type="color"], #affm-radius').forEach(function (input) {
             input.addEventListener('input', function () {
-                const key = input.id.replace('awpm-design-', '');
-                if (input.type === 'color' && /^#[a-f0-9]{6}$/i.test(input.value)) preview.style.setProperty('--awpm-' + key, input.value);
-                else if (input.id === 'awpm-radius') preview.style.setProperty('--awpm-radius', Math.min(24, Math.max(0, Number(input.value) || 0)) + 'px');
+                const key = input.id.replace('affm-design-', '');
+                if (input.type === 'color' && /^#[a-f0-9]{6}$/i.test(input.value)) preview.style.setProperty('--affm-' + key, input.value);
+                else if (input.id === 'affm-radius') preview.style.setProperty('--affm-radius', Math.min(24, Math.max(0, Number(input.value) || 0)) + 'px');
             });
         });
     });
     window.addEventListener('beforeunload', function (event) {
         if (dirty) { event.preventDefault(); event.returnValue = ''; }
     });
-    const exchange = document.getElementById('awpm-exchange_source');
-    const manualRates = document.getElementById('awpm-manual-exchange-rates');
-    const release = document.getElementById('awpm-release_mode');
-    const releaseDays = document.getElementById('awpm-release-days');
+    const exchange = document.getElementById('affm-exchange_source');
+    const manualRates = document.getElementById('affm-manual-exchange-rates');
+    const release = document.getElementById('affm-release_mode');
+    const releaseDays = document.getElementById('affm-release-days');
     function conditionalFields() {
         if (exchange && manualRates) manualRates.hidden = !['auto', 'manual'].includes(exchange.value);
         if (release && releaseDays) {
@@ -121,12 +121,12 @@
     }
     if (exchange) exchange.addEventListener('change', conditionalFields);
     if (release) release.addEventListener('change', conditionalFields);
-    document.querySelectorAll('[data-awpm-provider]').forEach(function (card) {
-        const provider = card.dataset.awpmProvider;
-        const environment = card.querySelector('select[name="awpm_gateway[' + provider + '_mode]"]');
-        const marker = card.querySelector('[data-awpm-credential-mode]');
-        const title = card.querySelector('[data-awpm-credential-title]');
-        const fields = Array.from(card.querySelectorAll('[data-awpm-credential]'));
+    document.querySelectorAll('[data-affm-provider]').forEach(function (card) {
+        const provider = card.dataset.affmProvider;
+        const environment = card.querySelector('select[name="affm_gateway[' + provider + '_mode]"]');
+        const marker = card.querySelector('[data-affm-credential-mode]');
+        const title = card.querySelector('[data-affm-credential-title]');
+        const fields = Array.from(card.querySelectorAll('[data-affm-credential]'));
         if (!environment || !marker) return;
         let current = marker.value;
         const drafts = {};

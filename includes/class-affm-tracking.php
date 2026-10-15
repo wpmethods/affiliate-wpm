@@ -1,9 +1,9 @@
 <?php
 defined( 'ABSPATH' ) || exit;
 
-final class AWPM_Tracking {
-	const COOKIE = 'awpm_referral';
-	const CLICK_COOKIE = 'awpm_click';
+final class AFFM_Tracking {
+	const COOKIE = 'affm_referral';
+	const CLICK_COOKIE = 'affm_click';
 	public static function init() {
 		add_action( 'template_redirect', array( __CLASS__, 'capture' ), 1 );
 		add_action( 'woocommerce_checkout_create_order', array( __CLASS__, 'attach' ), 20 );
@@ -13,14 +13,14 @@ final class AWPM_Tracking {
 		add_action( 'deleted_user', array( __CLASS__, 'delete_customer' ) );
 	}
 	public static function active( $id ) {
-		return $id && get_userdata( $id ) && 'approved' === AWPM_Affiliates::status( $id ) && 'yes' !== get_user_meta( $id, '_awpm_blocked', true );
+		return $id && get_userdata( $id ) && 'approved' === AFFM_Affiliates::status( $id ) && 'yes' !== get_user_meta( $id, '_affm_blocked', true );
 	}
 	public static function token( $id ) {
-		$token = get_user_meta( $id, '_awpm_token', true );
+		$token = get_user_meta( $id, '_affm_token', true );
 		if ( ! $token ) {
 			$token = strtolower( wp_generate_password( 32, false, false ) );
-			add_user_meta( $id, '_awpm_token', $token, true );
-			$token = get_user_meta( $id, '_awpm_token', true );
+			add_user_meta( $id, '_affm_token', $token, true );
+			$token = get_user_meta( $id, '_affm_token', true );
 		}
 		return $token;
 	}
@@ -29,7 +29,7 @@ final class AWPM_Tracking {
 		return $data . '.' . hash_hmac( 'sha256', $data, wp_salt( 'auth' ) );
 	}
 	public static function referral() {
-		return AWPM_Settings::program_enabled() ? self::cookie_id( self::COOKIE ) : 0;
+		return AFFM_Settings::program_enabled() ? self::cookie_id( self::COOKIE ) : 0;
 	}
 	private static function cookie_id( $name ) {
 		$value = isset( $_COOKIE[ $name ] ) ? sanitize_text_field( wp_unslash( $_COOKIE[ $name ] ) ) : '';
@@ -39,21 +39,21 @@ final class AWPM_Tracking {
 		return self::active( (int) $parts[0] ) ? (int) $parts[0] : 0;
 	}
 	public static function capture() {
-		$key = AWPM_Settings::referral_request_key();
+		$key = AFFM_Settings::referral_request_key();
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Public referral URLs must work for guests without expiring nonces; token format, affiliate eligibility and consent are checked before attribution.
-		if ( ! AWPM_Settings::program_enabled() || ! $key || ! isset( $_GET[ $key ] ) || ! is_scalar( $_GET[ $key ] ) || is_admin() || headers_sent() ) { return; }
+		if ( ! AFFM_Settings::program_enabled() || ! $key || ! isset( $_GET[ $key ] ) || ! is_scalar( $_GET[ $key ] ) || is_admin() || headers_sent() ) { return; }
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Public referral URLs must work for guests without expiring nonces; token format, affiliate eligibility and consent are checked before attribution.
 		$token = sanitize_text_field( wp_unslash( $_GET[ $key ] ) );
 		if ( ! preg_match( '/^[a-z0-9]{32}$/', $token ) ) { return; }
 		// phpcs:ignore WordPress.DB.SlowDBQuery -- Exact validated token lookup returns one ID with no count; WordPress caches the query, and eligibility is checked separately.
-		$users = get_users( array( 'count_total' => false, 'cache_results' => true, 'meta_key' => '_awpm_token', 'meta_value' => $token, 'number' => 1, 'fields' => 'ID' ) );
+		$users = get_users( array( 'count_total' => false, 'cache_results' => true, 'meta_key' => '_affm_token', 'meta_value' => $token, 'number' => 1, 'fields' => 'ID' ) );
 		$id = $users ? (int) $users[0] : 0;
 		if ( ! self::active( $id ) || $id === get_current_user_id() ) { return; }
 		// Consent integrations can veto tracking before a cookie is created.
-		if ( ! apply_filters( 'awpm_tracking_allowed', true, $id ) ) { return; }
+		if ( ! apply_filters( 'affm_tracking_allowed', true, $id ) ) { return; }
 		self::record_click( $id );
-		if ( 'first' === AWPM_Settings::get( 'attribution' ) && self::referral() ) { return; }
-		$expires = time() + DAY_IN_SECONDS * AWPM_Settings::get( 'cookie_days' );
+		if ( 'first' === AFFM_Settings::get( 'attribution' ) && self::referral() ) { return; }
+		$expires = time() + DAY_IN_SECONDS * AFFM_Settings::get( 'cookie_days' );
 		$value = self::payload( $id, $expires );
 		setcookie( self::COOKIE, $value, array( 'expires' => $expires, 'path' => '/', 'secure' => is_ssl(), 'httponly' => true, 'samesite' => 'Lax' ) );
 		$_COOKIE[ self::COOKIE ] = $value;
@@ -63,8 +63,8 @@ final class AWPM_Tracking {
 	}
 	public static function record_click( $id ) {
 		global $wpdb;
-		if ( ! AWPM_Settings::program_enabled() || ! self::active( $id ) || $id === get_current_user_id() || ! apply_filters( 'awpm_tracking_allowed', true, $id ) || self::cookie_id( self::CLICK_COOKIE ) === $id ) { return false; }
-		$table = AWPM_Store::table( 'clicks' );
+		if ( ! AFFM_Settings::program_enabled() || ! self::active( $id ) || $id === get_current_user_id() || ! apply_filters( 'affm_tracking_allowed', true, $id ) || self::cookie_id( self::CLICK_COOKIE ) === $id ) { return false; }
+		$table = AFFM_Store::table( 'clicks' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom aggregate/referral table has no WordPress CRUD API; the statement must read or update current counters.
 		$result = $wpdb->query( $wpdb->prepare( 'INSERT INTO %i (affiliate_id,click_date,clicks) VALUES (%d,%s,1) ON DUPLICATE KEY UPDATE clicks=clicks+1', $table, $id, current_time( 'Y-m-d' ) ) );
 		if ( false === $result ) { return false; }
@@ -84,39 +84,39 @@ final class AWPM_Tracking {
 		$id = self::referral();
 		$customer = get_userdata( $customer_id );
 		$affiliate = $id ? get_userdata( $id ) : false;
-		if ( ! AWPM_Settings::program_enabled() || ! $customer || ! $affiliate || $id === (int) $customer_id || ! array_intersect( array( 'customer', 'subscriber' ), $customer->roles ) || strtolower( $customer->user_email ) === strtolower( $affiliate->user_email ) || ! apply_filters( 'awpm_tracking_allowed', true, $id ) ) { return; }
-		$table = AWPM_Store::table( 'customers' );
+		if ( ! AFFM_Settings::program_enabled() || ! $customer || ! $affiliate || $id === (int) $customer_id || ! array_intersect( array( 'customer', 'subscriber' ), $customer->roles ) || strtolower( $customer->user_email ) === strtolower( $affiliate->user_email ) || ! apply_filters( 'affm_tracking_allowed', true, $id ) ) { return; }
+		$table = AFFM_Store::table( 'customers' );
 		// A customer can only be attributed once, even if both creation hooks fire.
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom aggregate/referral table has no WordPress CRUD API; the statement must read or update current counters.
 		$wpdb->query( $wpdb->prepare( 'INSERT IGNORE INTO %i (customer_id,affiliate_id,created_at) VALUES (%d,%d,%s)', $table, $customer_id, $id, current_time( 'mysql', true ) ) );
 	}
 	public static function delete_customer( $customer_id ) {
 		global $wpdb;
-		$table = AWPM_Store::table( 'customers' );
+		$table = AFFM_Store::table( 'customers' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom aggregate/referral table has no WordPress CRUD API; the statement must read or update current counters.
 		$wpdb->query( $wpdb->prepare( 'DELETE FROM %i WHERE customer_id=%d OR affiliate_id=%d', $table, $customer_id, $customer_id ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom aggregate/referral table has no WordPress CRUD API; the statement must read or update current counters.
-		$wpdb->delete( AWPM_Store::table( 'clicks' ), array( 'affiliate_id' => $customer_id ) );
+		$wpdb->delete( AFFM_Store::table( 'clicks' ), array( 'affiliate_id' => $customer_id ) );
 	}
 	public static function attach( $order ) {
 		// Store API can attribute a draft before submission; sync still waits for a real order.
-		if ( AWPM_Commissions::incomplete_order( $order ) && ! $order->has_status( 'checkout-draft' ) ) { return; }
-		if ( ! AWPM_Settings::program_enabled() || $order->get_meta( '_awpm_affiliate' ) ) { return; }
+		if ( AFFM_Commissions::incomplete_order( $order ) && ! $order->has_status( 'checkout-draft' ) ) { return; }
+		if ( ! AFFM_Settings::program_enabled() || $order->get_meta( '_affm_affiliate' ) ) { return; }
 		$id = self::referral();
 		$user = $id ? get_userdata( $id ) : false;
 		if ( ! $user || $id === (int) $order->get_customer_id() || $id === get_current_user_id() || strtolower( $user->user_email ) === strtolower( $order->get_billing_email() ) ) { return; }
-		$order->update_meta_data( '_awpm_affiliate', $id );
-		$order->update_meta_data( '_awpm_currency', AWPM_Settings::get( 'currency' ) );
-		$order->update_meta_data( '_awpm_purchase_policy', AWPM_Settings::get( 'purchase_policy' ) );
+		$order->update_meta_data( '_affm_affiliate', $id );
+		$order->update_meta_data( '_affm_currency', AFFM_Settings::get( 'currency' ) );
+		$order->update_meta_data( '_affm_purchase_policy', AFFM_Settings::get( 'purchase_policy' ) );
 		$rates = array();
 		foreach ( $order->get_items() as $item_id => $item ) {
 			$product = $item->get_product();
 			if ( ! $product ) { continue; }
 			if ( $product->is_type( 'variation' ) ) { $product = wc_get_product( $product->get_parent_id() ); }
-			$type = $product ? $product->get_meta( '_awpm_type' ) : '';
-			$rates[ $item_id ] = array( 'title' => AWPM_Account::item_title( $item ), 'type' => $type ?: AWPM_Settings::get( 'commission_type' ), 'rate' => $type ? (float) $product->get_meta( '_awpm_rate' ) : (float) AWPM_Settings::get( 'commission_rate' ), 'quantity' => (float) $item->get_quantity(), 'total' => (float) $item->get_total() );
+			$type = $product ? $product->get_meta( '_affm_type' ) : '';
+			$rates[ $item_id ] = array( 'title' => AFFM_Account::item_title( $item ), 'type' => $type ?: AFFM_Settings::get( 'commission_type' ), 'rate' => $type ? (float) $product->get_meta( '_affm_rate' ) : (float) AFFM_Settings::get( 'commission_rate' ), 'quantity' => (float) $item->get_quantity(), 'total' => (float) $item->get_total() );
 		}
-		$order->update_meta_data( '_awpm_rates', $rates );
-		$order->update_meta_data( '_awpm_calculation_version', 2 );
+		$order->update_meta_data( '_affm_rates', $rates );
+		$order->update_meta_data( '_affm_calculation_version', 2 );
 	}
 }

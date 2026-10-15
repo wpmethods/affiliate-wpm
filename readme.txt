@@ -1,4 +1,4 @@
-=== Affiliate WPM - Affiliate Program for WooCommerce ===
+=== AffMint – Affiliate Marketing for WooCommerce ===
 Contributors: wpmethods
 Tags: woocommerce, affiliate, commission, referral, payout
 Requires at least: 6.5
@@ -13,7 +13,7 @@ WooCommerce referral tracking, product commissions and manual affiliate withdraw
 
 == Description ==
 
-Affiliate WPM runs a WooCommerce affiliate program using customer accounts and your store's base currency. All functionality included in this Free package is available without payment or activation.
+AffMint runs a WooCommerce affiliate program using customer accounts and your store's base currency. All functionality included in this Free package is available without payment or activation.
 
 = Free features =
 
@@ -33,7 +33,7 @@ Affiliate WPM runs a WooCommerce affiliate program using customer accounts and y
 
 = Pro features (separate add-on) =
 
-Affiliate WPM Pro extends the Free core and requires a separate installation and an active Pro license.
+AffMint Pro extends the Free core and requires a separate installation and an active Pro license.
 
 * PayPal Payouts API payments with Sandbox and Live environments.
 * Stripe Connect account onboarding and API payments with Test and Live environments.
@@ -49,8 +49,8 @@ Premium implementation code is not included in this WordPress.org package. Free 
 == Installation ==
 
 1. Install and activate WooCommerce.
-2. Install Affiliate WPM through Plugins and activate it.
-3. Open WooCommerce -> Affiliate WPM -> Settings; no license is needed.
+2. Install AffMint through Plugins and activate it.
+3. Open WooCommerce -> AffMint -> Settings; no license is needed.
 4. Configure enrollment, commissions, referral tracking and one manual payout method.
 5. Customers join at My Account -> Affiliate Area.
 6. Test a referral order using a separate buyer account and review Docs/index.html.

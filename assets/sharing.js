@@ -1,11 +1,11 @@
 (function () {
     'use strict';
-    const config = window.awpmSharing || {};
-    document.querySelectorAll('[data-awpm-generator]').forEach(function (form) {
-        const section = form.closest('.awpm-generator');
+    const config = window.affmSharing || {};
+    document.querySelectorAll('[data-affm-generator]').forEach(function (form) {
+        const section = form.closest('.affm-generator');
         const status = section.querySelector('[role="status"]');
-        const result = section.querySelector('.awpm-generator-result');
-        const input = section.querySelector('#awpm-generated-link');
+        const result = section.querySelector('.affm-generator-result');
+        const input = section.querySelector('#affm-generated-link');
         let busy = false;
         form.addEventListener('submit', async function (event) {
             event.preventDefault();
@@ -16,7 +16,7 @@
             status.textContent = '';
             result.hidden = true;
             input.value = '';
-            const body = new URLSearchParams({action: 'awpm_generate_link', nonce: config.nonce || '', url: form.elements.url.value.trim()});
+            const body = new URLSearchParams({action: 'affm_generate_link', nonce: config.nonce || '', url: form.elements.url.value.trim()});
             try {
                 const response = await fetch(config.ajax, {method: 'POST', credentials: 'same-origin', body: body});
                 const data = await response.json();
@@ -32,17 +32,17 @@
             }
         });
     });
-    document.querySelectorAll('[data-awpm-share]').forEach(function (button) {
+    document.querySelectorAll('[data-affm-share]').forEach(function (button) {
         const icon = button.querySelector('svg path');
         const originalPath = icon && icon.getAttribute('d');
         const originalTitle = button.title;
         const originalLabel = button.getAttribute('aria-label');
         let resetTimer;
         button.addEventListener('click', async function () {
-            const section = button.closest('.awpm-product-share, .awpm-generator');
-            const input = section.querySelector('.awpm-share-url, #awpm-generated-link');
+            const section = button.closest('.affm-product-share, .affm-generator');
+            const input = section.querySelector('.affm-share-url, #affm-generated-link');
             const status = section.querySelector('[role="status"]');
-            const link = button.dataset.awpmLink || (input && input.value);
+            const link = button.dataset.affmLink || (input && input.value);
             if (!link) return;
             if (input) { input.focus(); input.select(); input.setSelectionRange(0, input.value.length); }
             try {
