@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name: Refmora
- * Plugin URI: https://wpmethods.com/
+ * Plugin URI: https://wpmethods.com/product/refmora-best-affiliate-plugin-for-woocommerce/
  * Description: WooCommerce referral tracking, product commissions and manual affiliate withdrawals. Optional Pro add-on.
  * Version: 1.0.0
  * Author: WP Methods
