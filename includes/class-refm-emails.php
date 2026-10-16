@@ -35,10 +35,12 @@ final class REFM_Emails {
 		return $config;
 	}
 	public static function save() {
-		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), 403 ); }
-		REFM_Security::admin_request( 'refm_emails' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
-		update_option( 'refm_emails', self::clean( isset( $_POST['refm_emails'] ) && is_array( $_POST['refm_emails'] ) ? wp_unslash( $_POST['refm_emails'] ) : array() ), false );
+		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the settings form to make changes.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_emails' );
+		$sanitized = self::clean( isset( $_POST['refm_emails'] ) && is_array( $_POST['refm_emails'] ) ? map_deep( wp_unslash( $_POST['refm_emails'] ), 'sanitize_textarea_field' ) : array() );
+		update_option( 'refm_emails', $sanitized, false );
 		wp_safe_redirect( admin_url( 'admin.php?page=refmora&tab=emails&saved=1' ) ); exit;
 	}
 	public static function queue( $event, $id, $context = array() ) { self::$queue[] = array( $event, $id, $context ); }

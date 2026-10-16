@@ -9,11 +9,11 @@ final class REFM_Checkout {
 		add_action( 'shutdown', array( __CLASS__, 'finish' ), 5 );
 	}
 	private static function quick_request() {
-		if ( ! wp_doing_ajax() || 'POST' !== sanitize_text_field( wp_unslash( REFM_Security::value( $_SERVER, 'REQUEST_METHOD' ) ) ) || ! function_exists( 'handle_quick_order_submit_cs' ) ) { return false; }
+		if ( ! wp_doing_ajax() || 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) || ! function_exists( 'handle_quick_order_submit_cs' ) ) { return false; }
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- This scalar is the nonce being verified on the next line; no order mutation occurs before verification.
-		$nonce = sanitize_text_field( wp_unslash( REFM_Security::value( $_POST, 'security' ) ) );
+		$nonce = sanitize_text_field( ( isset( $_POST[ 'security' ] ) && is_scalar( $_POST[ 'security' ] ) ? wp_unslash( $_POST[ 'security' ] ) : '' ) );
 		if ( ! wp_verify_nonce( $nonce, 'quick_order_nonce' ) ) { return false; }
-		return 'quick_order_submit' === sanitize_key( wp_unslash( REFM_Security::value( $_POST, 'action' ) ) );
+		return 'quick_order_submit' === sanitize_key( ( isset( $_POST[ 'action' ] ) && is_scalar( $_POST[ 'action' ] ) ? wp_unslash( $_POST[ 'action' ] ) : '' ) );
 	}
 	public static function collect( $order ) {
 		if ( ! self::quick_request() || ! $order instanceof WC_Order || $order instanceof WC_Order_Refund || ! $order->get_id() || ! $order->get_items( 'line_item' ) ) { return; }

@@ -23,8 +23,11 @@ final class REFM_License {
 		echo '<div class="refm-notice refm-free-notice" role="status"><p><strong>' . esc_html__( 'Free mode', 'refmora' ) . '</strong> ' . esc_html__( 'Your affiliate program and settings work without a license. The separate Pro add-on provides automatic payouts, currency conversion, CSV exports.', 'refmora' ) . '</p></div>';
 	}
 	public static function submit() {
+		if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the license form.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_license' );
 		if ( class_exists( 'REFM_Pro_License', false ) ) { REFM_Pro_License::submit(); return; }
-		REFM_Security::admin_request( 'refm_license' );
 		if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), '', array( 'response' => 403 ) ); }
 		wp_die( esc_html__( 'Free does not require activation. Install Pro separately to activate premium features.', 'refmora' ), '', array( 'response' => 403 ) );
 	}

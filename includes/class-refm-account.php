@@ -55,7 +55,7 @@ final class REFM_Account {
 		return $items;
 	}
 	public static function submit() {
-		if ( 'POST' !== sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) ) ) { return; }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { return; }
 		if ( ! isset( $_POST['refm_action'] ) || ! is_scalar( $_POST['refm_action'] ) || ! is_account_page() || ! is_wc_endpoint_url( 'refmora' ) ) { return; }
 		if ( ! is_user_logged_in() ) { return; }
 		$nonce = isset( $_POST['_wpnonce'] ) && is_scalar( $_POST['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ) : '';
@@ -64,11 +64,11 @@ final class REFM_Account {
 			$id = get_current_user_id();
 			$action = sanitize_key( wp_unslash( $_POST['refm_action'] ) );
 			if ( 'join' === $action ) {
-				$result = REFM_Affiliates::join( $id, 'yes' === REFM_Security::value( $_POST, 'refm_accept_terms' ), wp_unslash( REFM_Security::value( $_POST, 'refm_terms_version' ) ), wp_unslash( REFM_Security::rows( $_POST, 'refm_join' ) ) );
+				$result = REFM_Affiliates::join( $id, 'yes' === sanitize_text_field( ( isset( $_POST[ 'refm_accept_terms' ] ) && is_scalar( $_POST[ 'refm_accept_terms' ] ) ? wp_unslash( $_POST[ 'refm_accept_terms' ] ) : '' ) ), sanitize_text_field( ( isset( $_POST[ 'refm_terms_version' ] ) && is_scalar( $_POST[ 'refm_terms_version' ] ) ? wp_unslash( $_POST[ 'refm_terms_version' ] ) : '' ) ), array( 'website' => isset( $_POST['refm_join']['website'] ) && is_string( $_POST['refm_join']['website'] ) ? esc_url_raw( wp_unslash( $_POST['refm_join']['website'] ), array( 'http', 'https' ) ) : '', 'promotion' => isset( $_POST['refm_join']['promotion'] ) && is_string( $_POST['refm_join']['promotion'] ) ? sanitize_textarea_field( wp_unslash( $_POST['refm_join']['promotion'] ) ) : '' ) );
 				$messages = array( 'approved' => __( 'Your affiliate account is ready. Start sharing your referral link!', 'refmora' ), 'pending' => __( 'Your affiliate application is awaiting administrator approval.', 'refmora' ), 'rejected' => __( 'Your affiliate application was rejected. Please contact the store.', 'refmora' ) );
 				wc_add_notice( is_wp_error( $result ) ? $result->get_error_message() : ( $messages[ $result ] ?? '' ), is_wp_error( $result ) || 'rejected' === $result ? 'error' : 'success' );
 			} elseif ( 'stripe_connect' === $action ) {
-				$result = REFM_Gateways::connect( sanitize_text_field( wp_unslash( REFM_Security::value( $_POST, 'stripe_country' ) ) ) ); if ( is_wp_error( $result ) ) { wc_add_notice( $result->get_error_message(), 'error' ); }
+				$result = REFM_Gateways::connect( sanitize_text_field( ( isset( $_POST[ 'stripe_country' ] ) && is_scalar( $_POST[ 'stripe_country' ] ) ? wp_unslash( $_POST[ 'stripe_country' ] ) : '' ) ) ); if ( is_wp_error( $result ) ) { wc_add_notice( $result->get_error_message(), 'error' ); }
 			} elseif ( 'withdraw' === $action ) {
 				$method = isset( $_POST['method'] ) && is_scalar( $_POST['method'] ) ? sanitize_key( wp_unslash( $_POST['method'] ) ) : '';
 				$details = isset( $_POST['details'] ) && is_scalar( $_POST['details'] ) ? sanitize_textarea_field( wp_unslash( $_POST['details'] ) ) : '';
@@ -234,7 +234,7 @@ final class REFM_Account {
 		if ( $count <= 10 ) { return; }
 		$args = array();
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		foreach ( array( 'refm_cp', 'refm_pp', 'refm_rp' ) as $other ) { if ( isset( $_GET[ $other ] ) ) { $args[ $other ] = REFM_Security::page( $_GET, $other ); } }
+		foreach ( array( 'refm_cp', 'refm_pp', 'refm_rp' ) as $other ) { if ( isset( $_GET[ $other ] ) ) { $args[ $other ] = REFM_Security::page_number( absint( ( isset( $_GET[ $other ] ) && is_scalar( $_GET[ $other ] ) ? wp_unslash( $_GET[ $other ] ) : '1' ) ) ); } }
 		echo '<nav class="refm-pagination" aria-label="' . esc_attr__( 'History pages', 'refmora' ) . '">';
 		foreach ( array( -1 => __( 'Previous', 'refmora' ), 1 => __( 'Next', 'refmora' ) ) as $step => $label ) {
 			if ( -1 === $step && $page > 1 || 1 === $step && $page * 10 < $count ) {
@@ -251,7 +251,7 @@ final class REFM_Account {
 		$table = REFM_Store::table( 'customers' );
 		$count = REFM_Store::referral_stats( $id )['customers'];
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		$page = min( REFM_Security::page( $_GET, 'refm_rp' ), max( 1, (int) ceil( $count / 10 ) ) );
+		$page = min( REFM_Security::page_number( absint( ( isset( $_GET[ 'refm_rp' ] ) && is_scalar( $_GET[ 'refm_rp' ] ) ? wp_unslash( $_GET[ 'refm_rp' ] ) : '1' ) ) ), max( 1, (int) ceil( $count / 10 ) ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
 		$ids = $wpdb->get_col( $wpdb->prepare( 'SELECT customer_id FROM %i WHERE affiliate_id=%d ORDER BY created_at DESC,customer_id DESC LIMIT 10 OFFSET %d', $table, $id, ( $page - 1 ) * 10 ) );
 		if ( $ids ) { update_meta_cache( 'user', $ids ); }
@@ -309,7 +309,7 @@ final class REFM_Account {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
 		$count = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM %i WHERE affiliate_id=%d', $table, $id ) );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		$page = min( REFM_Security::page( $_GET, $key ), max( 1, (int) ceil( $count / 10 ) ) );
+		$page = min( REFM_Security::page_number( absint( ( isset( $_GET[ $key ] ) && is_scalar( $_GET[ $key ] ) ? wp_unslash( $_GET[ $key ] ) : '1' ) ) ), max( 1, (int) ceil( $count / 10 ) ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- Custom affiliate tables have no WordPress CRUD API; read current totals, history and privacy records without stale cross-request caches.
 		$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM %i WHERE affiliate_id=%d ORDER BY id DESC LIMIT 10 OFFSET %d', $table, $id, ( $page - 1 ) * 10 ) );
 		echo '<section class="refm-card refm-history" id="refm-' . esc_attr( $type ) . '"><h3>' . wp_kses( REFM_UI::icon( $type ), REFM_UI::allowed_html() ) . esc_html( $commission ? __( 'Commission history', 'refmora' ) : __( 'Withdrawal history', 'refmora' ) ) . '</h3><div class="refm-table-scroll"><table><thead><tr><th>' . esc_html__( 'Reference', 'refmora' ) . '</th><th>' . esc_html__( 'Date', 'refmora' ) . '</th>';

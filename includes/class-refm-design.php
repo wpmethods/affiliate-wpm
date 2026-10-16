@@ -14,10 +14,13 @@ final class REFM_Design {
 		return $clean;
 	}
 	public static function save() {
-		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), 403 ); }
-		REFM_Security::admin_request( 'refm_design' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
-		update_option( 'refm_design', self::clean( isset( $_POST['refm_design'] ) && is_array( $_POST['refm_design'] ) ? wp_unslash( $_POST['refm_design'] ) : array() ), false );
+		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the settings form to make changes.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_design' );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- check_admin_referer() and capabilities are checked before input is passed directly to its typed schema sanitizer. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
+		$sanitized = self::clean( isset( $_POST['refm_design'] ) && is_array( $_POST['refm_design'] ) ? wp_unslash( $_POST['refm_design'] ) : array() );
+		update_option( 'refm_design', $sanitized, false );
 		wp_safe_redirect( admin_url( 'admin.php?page=refmora&tab=customization&saved=1' ) ); exit;
 	}
 	public static function enqueue( $handle ) {

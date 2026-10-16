@@ -131,15 +131,17 @@ final class REFM_Settings {
 		return $clean;
 	}
 	public static function save() {
-		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), 403 ); }
-		REFM_Security::admin_request( 'refm_settings' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
+		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the settings form to make changes.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_settings' );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- check_admin_referer() and capabilities are checked before input is passed directly to its typed schema sanitizer. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
 		$input = self::clean( isset( $_POST['refm'] ) && is_array( $_POST['refm'] ) ? wp_unslash( $_POST['refm'] ) : array() );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
 		if ( isset( $_POST['refm_gateway'] ) ) {
 			if ( ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Only administrators can configure automatic payout credentials.', 'refmora' ), '', array( 'response' => 403 ) ); }
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
-			$gateways = REFM_Gateways::clean( wp_unslash( $_POST['refm_gateway'] ) );
+			$gateway_input = isset( $_POST['refm_gateway'] ) && is_array( $_POST['refm_gateway'] ) ? map_deep( wp_unslash( $_POST['refm_gateway'] ), 'sanitize_text_field' ) : array();
+			$gateways = REFM_Gateways::clean( $gateway_input );
 			if ( is_wp_error( $gateways ) ) { wp_safe_redirect( add_query_arg( array( 'page' => 'refmora', 'tab' => 'settings', 'refm_error' => 1, 'refm_message' => $gateways->get_error_message() ), admin_url( 'admin.php' ) ) ); exit; }
 			update_option( REFM_Gateways::OPTION, $gateways, false );
 		}
@@ -147,7 +149,7 @@ final class REFM_Settings {
 		if ( isset( $gateways ) ) {
 			$result = REFM_Gateways::verify_paypal();
 			// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. Pro setup validates mode and whsec_ secrets against its schema; only authorized, nonce-verified administrators reach this call.
-			if ( ! is_wp_error( $result ) ) { $result = REFM_Stripe::setup( wp_unslash( $_POST['refm_gateway'] ) ); }
+			if ( ! is_wp_error( $result ) ) { $result = REFM_Stripe::setup( $gateway_input ); }
 			if ( is_wp_error( $result ) ) { wp_safe_redirect( add_query_arg( array( 'page' => 'refmora', 'tab' => 'settings', 'saved' => 1, 'refm_error' => 1, 'refm_message' => $result->get_error_message() ), admin_url( 'admin.php' ) ) ); exit; }
 		}
 		wp_safe_redirect( admin_url( 'admin.php?page=refmora&tab=settings&saved=1' ) );
@@ -162,13 +164,13 @@ final class REFM_Settings {
 	public static function save_product( $product ) {
 		if ( ! current_user_can( 'edit_post', $product->get_id() ) ) { return; }
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Read and sanitize the product nonce solely for immediate wp_verify_nonce validation before any metadata change.
-		$nonce = sanitize_text_field( wp_unslash( REFM_Security::value( $_POST, 'woocommerce_meta_nonce' ) ) );
+		$nonce = sanitize_text_field( ( isset( $_POST[ 'woocommerce_meta_nonce' ] ) && is_scalar( $_POST[ 'woocommerce_meta_nonce' ] ) ? wp_unslash( $_POST[ 'woocommerce_meta_nonce' ] ) : '' ) );
 		if ( ! wp_verify_nonce( $nonce, 'woocommerce_save_data' ) ) { return; }
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Called from woocommerce_admin_process_product_object after WooCommerce validates its product-save nonce; edit_post capability is also required.
-		$type = sanitize_key( wp_unslash( REFM_Security::value( $_POST, '_refm_type' ) ) );
+		$type = sanitize_key( ( isset( $_POST[ '_refm_type' ] ) && is_scalar( $_POST[ '_refm_type' ] ) ? wp_unslash( $_POST[ '_refm_type' ] ) : '' ) );
 		$type = in_array( $type, array( 'percent', 'fixed', 'disabled' ), true ) ? $type : '';
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Called from woocommerce_admin_process_product_object after WooCommerce validates its product-save nonce; edit_post capability is also required.
-		$rate = max( 0, min( 1000000, (float) wc_format_decimal( wp_unslash( REFM_Security::value( $_POST, '_refm_rate', '0' ) ) ) ) );
+		$rate = max( 0, min( 1000000, (float) wc_format_decimal( sanitize_text_field( ( isset( $_POST[ '_refm_rate' ] ) && is_scalar( $_POST[ '_refm_rate' ] ) ? wp_unslash( $_POST[ '_refm_rate' ] ) : '0' ) ) ) ) );
 		$product->update_meta_data( '_refm_type', $type );
 		$product->update_meta_data( '_refm_rate', 'percent' === $type ? min( 100, $rate ) : $rate );
 	}

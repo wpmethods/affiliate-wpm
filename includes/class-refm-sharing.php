@@ -74,12 +74,12 @@ final class REFM_Sharing {
 		return true;
 	}
 	public static function ajax() {
-		if ( 'POST' !== sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ?? '' ) ) ) { wp_send_json_error( array( 'message' => __( 'Use the link generator form.', 'refmora' ) ), 405 ); }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_send_json_error( array( 'message' => __( 'Use the link generator form.', 'refmora' ) ), 405 ); }
+		if ( ! is_user_logged_in() ) { wp_send_json_error( array( 'message' => __( 'Please sign in to generate a referral link.', 'refmora' ) ), 403 ); }
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Read the scalar nonce only to validate it immediately with wp_verify_nonce; no state change occurs before validation.
-		$nonce = sanitize_text_field( wp_unslash( REFM_Security::value( $_POST, 'nonce' ) ) );
-		if ( ! is_user_logged_in() || ! wp_verify_nonce( $nonce, 'refm_generate_link' ) ) { wp_send_json_error( array( 'message' => __( 'Your session expired. Refresh and try again.', 'refmora' ) ), 403 ); }
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
-		$url = isset( $_POST['url'] ) && is_string( $_POST['url'] ) ? sanitize_url( trim( wp_unslash( $_POST['url'] ) ), array( 'http', 'https' ) ) : '';
+		$nonce = sanitize_text_field( ( isset( $_POST[ 'nonce' ] ) && is_scalar( $_POST[ 'nonce' ] ) ? wp_unslash( $_POST[ 'nonce' ] ) : '' ) );
+		if ( ! wp_verify_nonce( $nonce, 'refm_generate_link' ) ) { wp_send_json_error( array( 'message' => __( 'Your session expired. Refresh and try again.', 'refmora' ) ), 403 ); }
+		$url = isset( $_POST['url'] ) && is_scalar( $_POST['url'] ) ? esc_url_raw( wp_unslash( $_POST['url'] ), array( 'http', 'https' ) ) : '';
 		$result = self::link( get_current_user_id(), $url );
 		if ( is_wp_error( $result ) ) { wp_send_json_error( array( 'message' => $result->get_error_message() ), 400 ); }
 		wp_send_json_success( array( 'url' => $result ) );
@@ -133,10 +133,13 @@ final class REFM_Sharing {
 		return '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="' . esc_attr( $paths[ $key ] ?? $paths['copy'] ) . '"></path></svg>';
 	}
 	public static function save() {
-		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), 403 ); }
-		REFM_Security::admin_request( 'refm_sharing' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
-		update_option( 'refm_sharing', self::clean( wp_unslash( $_POST['refm_sharing'] ?? array() ) ), false );
+		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the settings form to make changes.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_sharing' );
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- check_admin_referer() and capabilities are checked before input is passed directly to its typed schema sanitizer. The dedicated clean() schema sanitizes each permitted setting using typed, text, HTML, email, URL or credential validation; blanket text sanitization would corrupt structured settings.
+		$sanitized = self::clean( wp_unslash( $_POST['refm_sharing'] ?? array() ) );
+		update_option( 'refm_sharing', $sanitized, false );
 		wp_safe_redirect( admin_url( 'admin.php?page=refmora&tab=sharing&saved=1' ) ); exit;
 	}
 	public static function render() {

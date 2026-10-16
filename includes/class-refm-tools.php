@@ -15,7 +15,7 @@ final class REFM_Tools {
 	public static function decode_backup( $json ) {
 		if ( ! is_string( $json ) || strlen( $json ) > self::MAX_BACKUP_SIZE ) { return new WP_Error( 'backup', __( 'Choose a settings JSON backup smaller than 1 MB.', 'refmora' ) ); }
 		$data = json_decode( preg_replace( '/^\xEF\xBB\xBF/', '', $json ), true, 32 );
-		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $data ) || ! in_array( $data['format'] ?? '', array( 'refmora-settings', 'refmora-settings' ), true ) || 1 !== ( $data['schema_version'] ?? null ) || ! isset( $data['settings'] ) || ! is_array( $data['settings'] ) || count( $data['settings'] ) !== 4 ) { return new WP_Error( 'backup', __( 'This is not a supported Refmora settings backup.', 'refmora' ) ); }
+		if ( JSON_ERROR_NONE !== json_last_error() || ! is_array( $data ) || ! in_array( $data['format'] ?? '', array( 'refmora-settings', 'affmint-settings' ), true ) || 1 !== ( $data['schema_version'] ?? null ) || ! isset( $data['settings'] ) || ! is_array( $data['settings'] ) || count( $data['settings'] ) !== 4 ) { return new WP_Error( 'backup', __( 'This is not a supported Refmora settings backup.', 'refmora' ) ); }
 		foreach ( array( 'program', 'sharing', 'emails', 'appearance' ) as $key ) { if ( ! isset( $data['settings'][ $key ] ) || ! is_array( $data['settings'][ $key ] ) || empty( $data['settings'][ $key ] ) ) { return new WP_Error( 'backup', __( 'The backup is incomplete. No settings were changed.', 'refmora' ) ); } }
 		return array( 'refm_settings' => REFM_Settings::clean( $data['settings']['program'] ), 'refm_sharing' => REFM_Sharing::clean( $data['settings']['sharing'] ), 'refm_emails' => REFM_Emails::clean( $data['settings']['emails'] ), 'refm_design' => REFM_Design::clean( $data['settings']['appearance'] ) );
 	}
@@ -33,14 +33,18 @@ final class REFM_Tools {
 		return self::decode_backup( file_get_contents( $path ) );
 	}
 	public static function submit() {
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
-		$operation = REFM_Security::value( $_POST, 'operation' ); self::guard( $operation );
+		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the settings form to make changes.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_tools' );
+		$operation = isset( $_POST['operation'] ) && is_string( $_POST['operation'] ) ? sanitize_key( wp_unslash( $_POST['operation'] ) ) : '';
+		if ( ! in_array( $operation, array( 'backup', 'restore', 'reset', 'csv' ), true ) ) { wp_die( esc_html__( 'Unknown tools action.', 'refmora' ), '', array( 'response' => 400 ) ); }
+		if ( 'csv' !== $operation && ! current_user_can( 'manage_options' ) ) { wp_die( esc_html__( 'Only administrators can manage settings backups.', 'refmora' ), '', array( 'response' => 403 ) ); }
 		if ( 'backup' === $operation ) { self::download_headers( 'settings', 'json', 'application/json' ); echo wp_json_encode( self::backup(), JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE ); exit; }
 		if ( 'csv' === $operation ) { do_action( 'refm_export_data_request' ); wp_die( esc_html__( 'CSV export is available in the separate Refmora Pro add-on.', 'refmora' ), '', array( 'response' => 403 ) ); }
 		if ( 'restore' === $operation ) { $result = self::upload(); if ( ! is_wp_error( $result ) ) { self::apply( $result ); $result = __( 'Settings restored successfully.', 'refmora' ); } }
 		elseif ( 'reset' === $operation ) {
-			// phpcs:ignore WordPress.Security.NonceVerification.Missing -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
-			if ( 'RESET' !== REFM_Security::value( $_POST, 'confirmation' ) ) { $result = new WP_Error( 'confirm', __( 'Type RESET to confirm resetting plugin settings.', 'refmora' ) ); }
+			if ( 'RESET' !== ( isset( $_POST['confirmation'] ) && is_string( $_POST['confirmation'] ) ? sanitize_text_field( wp_unslash( $_POST['confirmation'] ) ) : '' ) ) { $result = new WP_Error( 'confirm', __( 'Type RESET to confirm resetting plugin settings.', 'refmora' ) ); }
 			else { self::apply( self::defaults() ); $result = __( 'Plugin settings reset to defaults. Your license and financial records were preserved.', 'refmora' ); }
 		} else { $result = new WP_Error( 'operation', __( 'Unknown tools action.', 'refmora' ) ); }
 		set_transient( 'refm_tools_notice_' . get_current_user_id(), array( 'error' => is_wp_error( $result ), 'message' => is_wp_error( $result ) ? $result->get_error_message() : $result ), 60 );

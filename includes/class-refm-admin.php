@@ -59,24 +59,23 @@ final class REFM_Admin {
 	}
 	public static function payout_action() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), 403 ); }
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Validated integer ID is read only to construct the entity-specific nonce; admin_request() verifies that nonce before mutation.
-		$id = absint( REFM_Security::value( $_POST, 'payout_id', '0' ) );
-		REFM_Security::admin_request( 'refm_payout_' . $id );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
-		$status = sanitize_key( wp_unslash( REFM_Security::value( $_POST, 'status' ) ) );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
-		$note = sanitize_textarea_field( wp_unslash( REFM_Security::value( $_POST, 'note' ) ) );
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the settings form to make changes.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		$id = absint( isset( $_POST['payout_id'] ) && is_scalar( $_POST['payout_id'] ) ? wp_unslash( $_POST['payout_id'] ) : 0 );
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_payout_' . $id );
+		$status = sanitize_key( ( isset( $_POST[ 'status' ] ) && is_scalar( $_POST[ 'status' ] ) ? wp_unslash( $_POST[ 'status' ] ) : '' ) );
+		$note = sanitize_textarea_field( ( isset( $_POST[ 'note' ] ) && is_scalar( $_POST[ 'note' ] ) ? wp_unslash( $_POST[ 'note' ] ) : '' ) );
 		$result = REFM_Payouts::transition( $id, $status, $note );
 		$url = add_query_arg( array( 'page' => 'refmora', 'tab' => 'payouts', 'refm_message' => is_wp_error( $result ) ? $result->get_error_message() : __( 'Withdrawal updated.', 'refmora' ), 'refm_error' => is_wp_error( $result ) ? 1 : 0 ), admin_url( 'admin.php' ) );
 		wp_safe_redirect( $url ); exit;
 	}
 	public static function affiliate_action() {
 		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), 403 ); }
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Validated integer ID is read only to construct the entity-specific nonce; admin_request() verifies that nonce before mutation.
-		$id = absint( REFM_Security::value( $_POST, 'affiliate_id', '0' ) );
-		REFM_Security::admin_request( 'refm_affiliate_' . $id );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
-		$operation = sanitize_key( wp_unslash( REFM_Security::value( $_POST, 'operation' ) ) ); $result = true;
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the settings form to make changes.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		$id = absint( isset( $_POST['affiliate_id'] ) && is_scalar( $_POST['affiliate_id'] ) ? wp_unslash( $_POST['affiliate_id'] ) : 0 );
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_affiliate_' . $id );
+		$operation = sanitize_key( ( isset( $_POST[ 'operation' ] ) && is_scalar( $_POST[ 'operation' ] ) ? wp_unslash( $_POST[ 'operation' ] ) : '' ) ); $result = true;
 		if ( in_array( $operation, array( 'approved', 'rejected' ), true ) ) { $result = REFM_Affiliates::review( $id, $operation ); }
 		elseif ( get_userdata( $id ) && in_array( $operation, array( 'block', 'unblock' ), true ) ) { $result = REFM_Affiliates::set_blocked( $id, 'block' === $operation ); }
 		else { $result = new WP_Error( 'invalid', __( 'Invalid affiliate action.', 'refmora' ) ); }
@@ -91,7 +90,7 @@ final class REFM_Admin {
 		$descriptions['tools'] = __( 'Back up and restore settings, reset defaults and export your program records.', 'refmora' );
 		$descriptions['license'] = __( 'Manage your license and receive updates from WP Methods.', 'refmora' );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		$tab = sanitize_key( REFM_Security::value( $_GET, 'tab', 'overview' ) );
+		$tab = sanitize_key( ( isset( $_GET[ 'tab' ] ) && is_scalar( $_GET[ 'tab' ] ) ? wp_unslash( $_GET[ 'tab' ] ) : 'overview' ) );
 		if ( ! isset( $tabs[ $tab ] ) ) { $tab = 'overview'; }
 		$active = REFM_Settings::program_enabled();
 		echo '<div class="wrap refm refm-admin"><a class="screen-reader-text" href="#refm-main">' . esc_html__( 'Skip to panel content', 'refmora' ) . '</a><header class="refm-admin-header"><div class="refm-brand"><span class="refm-brand-icon">' . wp_kses( REFM_UI::icon( 'sharing' ), REFM_UI::allowed_html() ) . '</span><div><span class="refm-eyebrow">WP METHODS</span><h1>Refmora <span class="refm-version">' . esc_html( REFM_VERSION ) . '</span> <span class="refm-tier-badge">' . esc_html( class_exists( 'REFM_Pro_License', false ) ? __( 'Pro', 'refmora' ) : __( 'Free', 'refmora' ) ) . '</span></h1></div></div><div class="refm-header-actions"><span class="refm-program-state ' . ( $active ? 'is-active' : '' ) . '"><span aria-hidden="true"></span>' . esc_html( $active ? __( 'Program active', 'refmora' ) : __( 'Program paused', 'refmora' ) ) . '</span><a class="button refm-primary" href="' . esc_url( wc_get_account_endpoint_url( 'refmora' ) ) . '">' . esc_html__( 'Affiliate Area', 'refmora' ) . wp_kses( REFM_UI::icon( 'arrow' ), REFM_UI::allowed_html() ) . '</a></div></header><div class="refm-admin-layout"><aside class="refm-sidebar"><p class="refm-eyebrow">' . esc_html__( 'PROGRAM MANAGEMENT', 'refmora' ) . '</p><nav class="refm-tabs" aria-label="' . esc_attr__( 'Affiliate administration', 'refmora' ) . '">';
@@ -100,9 +99,9 @@ final class REFM_Admin {
 		echo '</nav><div class="refm-sidebar-note">' . wp_kses( REFM_UI::icon( 'shield' ), REFM_UI::allowed_html() ) . '<strong>' . esc_html__( 'Built for your store', 'refmora' ) . '</strong><p>' . esc_html__( 'Simple referrals. Clear earnings. Payouts under your control.', 'refmora' ) . '</p></div></aside><main class="refm-main" id="refm-main"><div class="refm-heading"><span class="refm-eyebrow">' . esc_html__( 'YOUR PARTNER PROGRAM', 'refmora' ) . '</span><h2>' . esc_html( $tabs[ $tab ] ) . '</h2><p>' . esc_html( $descriptions[ $tab ] ) . '</p></div>';
 		REFM_License::activation_notice( true );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		if ( '1' === REFM_Security::value( $_GET, 'saved' ) ) { REFM_UI::toast( __( 'Settings saved.', 'refmora' ) ); }
+		if ( '1' === sanitize_text_field( ( isset( $_GET[ 'saved' ] ) && is_scalar( $_GET[ 'saved' ] ) ? wp_unslash( $_GET[ 'saved' ] ) : '' ) ) ) { REFM_UI::toast( __( 'Settings saved.', 'refmora' ) ); }
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		if ( isset( $_GET['refm_message'] ) && is_scalar( $_GET['refm_message'] ) ) { REFM_UI::toast( sanitize_text_field( wp_unslash( $_GET['refm_message'] ) ), '1' === REFM_Security::value( $_GET, 'refm_error' ) ); }
+		if ( isset( $_GET['refm_message'] ) && is_scalar( $_GET['refm_message'] ) ) { REFM_UI::toast( sanitize_text_field( wp_unslash( $_GET['refm_message'] ) ), '1' === sanitize_text_field( ( isset( $_GET[ 'refm_error' ] ) && is_scalar( $_GET[ 'refm_error' ] ) ? wp_unslash( $_GET[ 'refm_error' ] ) : '' ) ) ); }
 		if ( 'settings' === $tab ) { self::settings(); }
 		elseif ( 'overview' === $tab ) { self::overview(); }
 		elseif ( 'affiliates' === $tab ) { self::affiliates(); }
@@ -227,14 +226,14 @@ final class REFM_Admin {
 	}
 	private static function search_term() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		return mb_substr( sanitize_text_field( wp_unslash( REFM_Security::value( $_GET, 'q' ) ) ), 0, 160 );
+		return mb_substr( sanitize_text_field( ( isset( $_GET[ 'q' ] ) && is_scalar( $_GET[ 'q' ] ) ? wp_unslash( $_GET[ 'q' ] ) : '' ) ), 0, 160 );
 	}
 	private static function list_statuses( $tab ) {
 		return 'affiliates' === $tab ? array( 'pending', 'approved', 'rejected', 'blocked' ) : ( 'payouts' === $tab ? array( 'pending', 'approved', 'processing', 'completed', 'tested', 'failed', 'rejected' ) : array( 'pending', 'available', 'reserved', 'paid', 'rejected' ) );
 	}
 	private static function list_status( $tab ) {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		$status = sanitize_key( REFM_Security::value( $_GET, 'status' ) );
+		$status = sanitize_key( ( isset( $_GET[ 'status' ] ) && is_scalar( $_GET[ 'status' ] ) ? wp_unslash( $_GET[ 'status' ] ) : '' ) );
 		return in_array( $status, self::list_statuses( $tab ), true ) ? $status : '';
 	}
 	private static function filters( $tab ) {
@@ -248,7 +247,7 @@ final class REFM_Admin {
 	}
 	private static function affiliates() {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		$page = REFM_Security::page( $_GET, 'paged' );
+		$page = REFM_Security::page_number( absint( ( isset( $_GET[ 'paged' ] ) && is_scalar( $_GET[ 'paged' ] ) ? wp_unslash( $_GET[ 'paged' ] ) : '1' ) ) );
 		// phpcs:ignore WordPress.DB.SlowDBQuery -- Required enrollment predicate; results are paginated at ten users and WordPress caches query IDs/totals.
 		$args = array( 'cache_results' => true, 'meta_key' => '_refm_enrolled', 'meta_value' => 'yes', 'number' => self::PAGE_SIZE, 'offset' => ( $page - 1 ) * self::PAGE_SIZE, 'orderby' => 'ID', 'order' => 'DESC' );
 		$search = self::search_term(); $status = self::list_status( 'affiliates' );
@@ -295,7 +294,7 @@ final class REFM_Admin {
 		global $wpdb;
 		$table = REFM_Store::table( $type );
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only, sanitized account/admin routing, search, pagination or feedback; no record mutation.
-		$page = REFM_Security::page( $_GET, 'paged' );
+		$page = REFM_Security::page_number( absint( ( isset( $_GET[ 'paged' ] ) && is_scalar( $_GET[ 'paged' ] ) ? wp_unslash( $_GET[ 'paged' ] ) : '1' ) ) );
 		$status = self::list_status( $type ); $search = self::search_term();
 		$like = '%' . $wpdb->esc_like( $search ) . '%';
 		$number = ltrim( $search, '#' );

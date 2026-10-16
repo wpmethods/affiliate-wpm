@@ -26,14 +26,14 @@ Refmora runs a WooCommerce affiliate program using customer accounts and your st
 * Manual payout methods with minimum withdrawal and manager approval/settlement.
 * Share & Earn icons, same-store link generator and top-selling product links.
 * Referral click/registration counters and customer contacts masked for affiliates.
-* Ten-item lists with pagination, administration search and status filters.
+* Ten-item admin and affiliate history lists with pagination; admin search and status filters. Overview summaries show recent activity.
 * Editable plain-text notifications, appearance settings and scoped custom CSS.
 * JSON settings backup, restore and reset, plus offline Docs/index.html documentation.
 * WooCommerce order CRUD, HPOS and classic/Checkout Blocks attribution hooks.
 
-= Pro features (separate add-on) =
+= Optional Refmora Pro add-on (not included) =
 
-Refmora Pro extends the Free core and requires a separate installation and an active Pro license.
+The features below are NOT included in this WordPress.org download. They are implemented by the separately distributed Refmora Pro add-on, which requires the Free plugin and an active Pro license. The Free plugin is useful on its own and all Free features work without activation.
 
 * PayPal Payouts API payments with Sandbox and Live environments.
 * Stripe Connect account onboarding and API payments with Test and Live environments.
@@ -71,7 +71,7 @@ The base currency saved under WooCommerce -> Settings -> General. Free does not 
 When the order is Completed, immediately by default or after the saved waiting period. Tax and shipping are excluded; product totals after discounts are used. Refunds adjust earnings; already paid refunds can reduce future balances.
 
 = What is premium? =
-The separately distributed Pro add-on implements automatic PayPal/Stripe payouts, currency conversion, CSV exports. Existing accounts and records are shared. The Free package contains contextual information about these extensions, not license-locked premium implementations.
+The separately distributed Pro add-on implements automatic PayPal/Stripe payouts, currency conversion, and CSV exports. Existing accounts and records are shared. The Free package contains contextual information about these extensions, not license-locked premium implementations.
 
 = Are updates available without a key? =
 Yes. Directory-hosted Free updates use the normal WordPress.org update mechanism after publication. Pro add-on updates are separate and never replace the Free package with externally downloaded code.
@@ -94,7 +94,7 @@ Notifications use WordPress wp_mail and the site's configured mail service. No s
 
 == Documentation ==
 
-Open Docs/index.html for the searchable merchant and affiliate guide, mobile navigation and print view. Settings, tracking, commissions, manual payouts, caching, privacy and troubleshooting are covered. Pro-only chapters are marked as add-on features.
+The merchant guide is bundled in the Docs folder of this plugin download. Open Docs/index.html for the searchable merchant and affiliate guide, mobile navigation and print view. Settings, tracking, commissions, manual payouts, caching, privacy and troubleshooting are covered. Pro-only chapters are marked as add-on features.
 
 == Developer notes ==
 

@@ -46,9 +46,11 @@ final class REFM_Currency {
 		return REFM_Commissions::sync( $order, true );
 	}
 	public static function recover() {
-		REFM_Security::admin_request( 'refm_currency_recovery' );
-		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- REFM_Security::admin_request() (or Tools guard()) enforces POST, capability and action-specific nonce before changes.
-		$result = self::retry_order( REFM_Security::value( $_POST, 'order_id' ) );
+		if ( ! current_user_can( 'manage_woocommerce' ) ) { wp_die( esc_html__( 'Access denied.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		if ( 'POST' !== ( isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? sanitize_text_field( wp_unslash( $_SERVER['REQUEST_METHOD'] ) ) : '' ) ) { wp_die( esc_html__( 'Use the settings form to make changes.', 'refmora' ), '', array( 'response' => 405 ) ); }
+		if ( ! isset( $_POST['_wpnonce'] ) || ! is_string( $_POST['_wpnonce'] ) ) { wp_die( esc_html__( 'Your session expired. Refresh and try again.', 'refmora' ), '', array( 'response' => 403 ) ); }
+		check_admin_referer( 'refm_currency_recovery' );
+		$result = self::retry_order( sanitize_text_field( ( isset( $_POST[ 'order_id' ] ) && is_scalar( $_POST[ 'order_id' ] ) ? wp_unslash( $_POST[ 'order_id' ] ) : '' ) ) );
 		set_transient( 'refm_currency_result_' . get_current_user_id(), is_wp_error( $result ) ? $result->get_error_message() : __( 'Order processed using its saved attribution and exchange rate. Check Commissions for its status.', 'refmora' ), 60 );
 		wp_safe_redirect( admin_url( 'admin.php?page=refmora&tab=settings' ) ); exit;
 	}
